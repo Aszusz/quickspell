@@ -9,6 +9,8 @@ use tauri::AppHandle;
 use crate::events;
 use crate::spells::Spell;
 
+pub const STARTING_SPELL_ID: &str = "search_files";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Frame {
@@ -75,7 +77,7 @@ impl AppState {
             inner.status = AppStatus::Loading;
             inner.spells = spells;
             inner.stack = vec![Frame {
-                spell_id: "quickspell".to_string(),
+                spell_id: STARTING_SPELL_ID.to_string(),
                 query: String::new(),
             }];
             inner.all_items.clear();
