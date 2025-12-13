@@ -1,6 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type AppStatus = "booting" | "loading" | "ready" | "error";
+export type AppStatus = "notStarted" | "booting" | "loading" | "ready" | "error";
 
 export interface StateSnapshot {
   status: AppStatus;

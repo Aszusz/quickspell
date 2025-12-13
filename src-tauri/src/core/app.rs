@@ -13,7 +13,9 @@ pub fn initialize(app: &AppHandle) -> Result<(), String> {
         load_spells_from_dir(&spells_dir).map_err(|err| format!("failed to load spells: {err}"))?;
 
     let state: State<AppState> = app.state();
-    state.begin_loading_with_spells(spells)?;
+    if state.begin_loading_with_spells(spells).is_err() {
+        return Ok(()); // already started
+    }
     state
         .emit_snapshot(app)
         .map_err(|err| format!("failed to emit loading snapshot: {err}"))?;
@@ -21,7 +23,19 @@ pub fn initialize(app: &AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
     async_runtime::spawn_blocking(move || {
         let state: State<AppState> = app_handle.state();
-        match state.finish_loading_with_items(&resources_dir) {
+
+        let is_streaming = state
+            .get_current_spell()
+            .and_then(|s| s.is_streaming)
+            .unwrap_or(false);
+
+        let result = if is_streaming {
+            state.stream_items_for_current_frame(&resources_dir, &app_handle)
+        } else {
+            state.finish_loading_with_items(&resources_dir)
+        };
+
+        match result {
             Ok(()) => {
                 let _ = state.emit_snapshot(&app_handle);
             }

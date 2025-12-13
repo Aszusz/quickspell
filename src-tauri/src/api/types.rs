@@ -38,8 +38,9 @@ pub struct StateSnapshot {
 // AppStatus
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum AppStatus {
+    NotStarted,
     Booting,
     Loading,
     Ready,

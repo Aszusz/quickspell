@@ -28,6 +28,7 @@ cargo clippy         # Lint (warnings = errors)
 This is a Tauri 2 app with React frontend and Rust backend.
 
 ### Frontend (`/src`)
+
 - React 19 + TypeScript + Vite + Tailwind CSS
 - Path alias: `@/` → `./src/`
 - Components use Radix UI primitives in `/components/ui/`
@@ -51,6 +52,7 @@ main.rs        # Entry point
 ```
 
 **Key patterns:**
+
 - `api/types.rs` = pure type definitions, no implementation code
 - `api/commands.rs` = thin command handlers that delegate to `core/`
 - `core/state.rs` = AppState with Mutex-wrapped inner state
