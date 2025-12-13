@@ -1,9 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { StateSnapshot } from "./events";
 import { listenEvent } from "./events";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { useOsTheme } from "./hooks/use-os-theme";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "./components/ui/breadcrumb";
+import { Input } from "./components/ui/input";
+import { Search } from "lucide-react";
+import { ScrollArea } from "./components/ui/scroll-area";
+import { Item, ItemGroup, ItemSeparator, ItemTitle } from "./components/ui/item";
+import { Kbd, KbdGroup } from "./components/ui/kbd";
 
 const DEFAULT_SNAPSHOT: StateSnapshot = {
   status: "booting",
@@ -14,6 +25,7 @@ const DEFAULT_SNAPSHOT: StateSnapshot = {
 
 function App() {
   const [snapshot, setSnapshot] = useState<StateSnapshot>(DEFAULT_SNAPSHOT);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   useOsTheme();
 
@@ -29,84 +41,103 @@ function App() {
     };
   }, []);
 
-  const statusLabel = useMemo(() => {
-    switch (snapshot.status) {
-      case "booting":
-        return "Booting";
-      case "loading":
-        return "Loading spells";
-      case "ready":
-        return "Ready";
-      case "error":
-      default:
-        return "Error";
-    }
-  }, [snapshot.status]);
-
   const spellNames = useMemo(
     () => [...snapshot.spellNames].sort((a, b) => a.localeCompare(b)),
     [snapshot.spellNames]
   );
 
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  const handleSearchBlur = () => {
+    // Keep focus on the search box even after clicking outside.
+    requestAnimationFrame(() => searchRef.current?.focus());
+  };
+
   return (
-    <main className="bg-background flex min-h-screen justify-center p-8 pt-16">
-      <div className="flex w-full max-w-md flex-col gap-4">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">QuickSpell</h1>
-          <p className="text-muted-foreground text-sm">Tauri-powered launcher status</p>
+    <main className="bg-background text-foreground flex h-screen w-full flex-col overflow-hidden p-3 sm:p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="w-full space-y-2">
+            <Breadcrumb className="border-border/80 bg-muted/40 w-full rounded-lg border px-3 py-2">
+              <BreadcrumbList>
+                {spellNames.length === 0 && (
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Spells</BreadcrumbPage>
+                  </BreadcrumbItem>
+                )}
+                {spellNames.map((name, idx) => (
+                  <React.Fragment key={name}>
+                    <BreadcrumbItem>
+                      {idx === spellNames.length - 1 ? (
+                        <BreadcrumbPage>{name}</BreadcrumbPage>
+                      ) : (
+                        <span className="text-foreground/80 text-sm">{name}</span>
+                      )}
+                    </BreadcrumbItem>
+                    {idx < spellNames.length - 1 ? <BreadcrumbSeparator /> : null}
+                  </React.Fragment>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Backend State</CardTitle>
-              <CardDescription>Live snapshot from the Rust core</CardDescription>
-            </div>
-            <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-semibold uppercase">
-              {statusLabel}
-            </span>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-6">
-            <div className="space-y-1">
-              <div className="text-muted-foreground text-sm">Loaded spells</div>
-              <div className="text-5xl font-bold tabular-nums">{snapshot.noOfSpells}</div>
-            </div>
-            <div className="space-y-2">
-              <div className="text-muted-foreground text-sm">Top items</div>
-              {snapshot.topItems.length ? (
-                <ul className="bg-muted text-foreground divide-border divide-y overflow-hidden rounded-md">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <div className="relative w-full">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              ref={searchRef}
+              className="w-full pl-10"
+              placeholder="Type to search..."
+              onBlur={handleSearchBlur}
+            />
+          </div>
+
+          <section className="flex min-h-0 flex-1 flex-col">
+            {snapshot.topItems.length ? (
+              <ScrollArea className="border-border/80 bg-muted/40 h-full w-full rounded-lg border">
+                <ItemGroup>
                   {snapshot.topItems.map((item, idx) => (
-                    <li key={`${item}-${idx}`} className="px-3 py-2 font-mono text-xs">
-                      {item}
-                    </li>
+                    <React.Fragment key={`${item}-${idx}`}>
+                      <Item size="sm" variant="muted" className="rounded-none border-0 px-3 py-2">
+                        <ItemTitle className="font-mono text-xs">{item}</ItemTitle>
+                      </Item>
+                      {idx < snapshot.topItems.length - 1 ? <ItemSeparator /> : null}
+                    </React.Fragment>
                   ))}
-                </ul>
-              ) : (
-                <div className="text-muted-foreground text-sm">No items loaded</div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="text-muted-foreground text-sm">Spell names</div>
-              {spellNames.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {spellNames.map((name) => (
-                    <span
-                      key={name}
-                      className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-semibold uppercase"
-                    >
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-muted-foreground text-sm">No spells loaded</div>
-              )}
-            </div>
-            <div className="text-muted-foreground text-sm">
-              Status: <span className="text-foreground font-medium">{snapshot.status}</span>
-            </div>
-          </CardContent>
-        </Card>
+                </ItemGroup>
+              </ScrollArea>
+            ) : (
+              <div className="text-muted-foreground text-sm">No items loaded</div>
+            )}
+          </section>
+        </div>
+
+        <div className="border-border/80 bg-muted/40 text-muted-foreground grid grid-cols-2 gap-3 rounded-lg border px-3 py-2 text-xs sm:grid-cols-3">
+          <div className="flex items-center gap-2">
+            <KbdGroup>
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
+            </KbdGroup>
+            <span className="text-foreground/80">Select</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <KbdGroup>
+              <Kbd>Enter</Kbd>
+            </KbdGroup>
+            <span className="text-foreground/80">Main action</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <KbdGroup>
+              <Kbd>Ctrl</Kbd>
+              <span className="opacity-60">+</span>
+              <Kbd>O</Kbd>
+            </KbdGroup>
+            <span className="text-foreground/80">Optional actions</span>
+          </div>
+        </div>
       </div>
     </main>
   );
