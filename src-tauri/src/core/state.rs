@@ -142,13 +142,9 @@ impl AppState {
             false
         };
 
-        if let Err(err) = log_filter_metrics(
-            &query,
-            item_count,
-            result_count,
-            applied,
-            start.elapsed(),
-        ) {
+        if let Err(err) =
+            log_filter_metrics(&query, item_count, result_count, applied, start.elapsed())
+        {
             eprintln!("failed to write quickspell log: {err}");
         }
 
@@ -305,7 +301,10 @@ fn log_filter_metrics(
     if let Some(parent) = log_path.parent() {
         create_dir_all(parent)?;
     }
-    let mut file = OpenOptions::new().create(true).append(true).open(log_path)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)?;
 
     writeln!(
         file,
@@ -315,9 +314,11 @@ fn log_filter_metrics(
 
 fn resolve_log_path() -> std::io::Result<std::path::PathBuf> {
     let base = if cfg!(target_os = "macos") {
-        env::var_os("HOME")
-            .map(std::path::PathBuf::from)
-            .map(|p| p.join("Library").join("Application Support").join("QuickSpell"))
+        env::var_os("HOME").map(std::path::PathBuf::from).map(|p| {
+            p.join("Library")
+                .join("Application Support")
+                .join("QuickSpell")
+        })
     } else if cfg!(target_os = "windows") {
         env::var_os("APPDATA")
             .map(std::path::PathBuf::from)
@@ -325,14 +326,12 @@ fn resolve_log_path() -> std::io::Result<std::path::PathBuf> {
     } else {
         env::var_os("XDG_DATA_HOME")
             .map(std::path::PathBuf::from)
-            .or_else(|| env::var_os("HOME").map(|p| std::path::PathBuf::from(p).join(".local/share")))
+            .or_else(|| {
+                env::var_os("HOME").map(|p| std::path::PathBuf::from(p).join(".local/share"))
+            })
             .map(|p| p.join("quickspell"))
     };
 
-    base.map(|p| p.join("quickspell.log")).ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "could not resolve log directory for quickspell",
-        )
-    })
+    base.map(|p| p.join("quickspell.log"))
+        .ok_or_else(|| std::io::Error::other("could not resolve log directory for quickspell"))
 }

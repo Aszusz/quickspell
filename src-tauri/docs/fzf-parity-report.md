@@ -5,6 +5,7 @@ Analysis of fzf source (`pattern.go`, `options.go`, `result.go`, `result_x86.go`
 ## Executive Summary
 
 nucleo provides **scoring parity** with fzf but lacks:
+
 1. Tiebreaker system (critical)
 2. Extended search syntax
 3. Scheme presets
@@ -12,23 +13,24 @@ nucleo provides **scoring parity** with fzf but lacks:
 
 ## 1. Scoring Algorithm
 
-| Feature | fzf | nucleo | Gap |
-|---------|-----|--------|-----|
-| Fuzzy matching | V1, V2 | V2 equivalent | None |
-| Exact substring | Yes | `AtomKind::Substring` | None |
-| Score calculation | Same formula | Same formula | None |
+| Feature           | fzf          | nucleo                | Gap  |
+| ----------------- | ------------ | --------------------- | ---- |
+| Fuzzy matching    | V1, V2       | V2 equivalent         | None |
+| Exact substring   | Yes          | `AtomKind::Substring` | None |
+| Score calculation | Same formula | Same formula          | None |
 
 **No wrapper needed** - nucleo's scoring matches fzf.
 
 ## 2. Case Matching
 
-| Mode | fzf | nucleo | Gap |
-|------|-----|--------|-----|
-| Smart (default) | `CaseSmart` | `CaseMatching::Smart` | None |
-| Ignore | `CaseIgnore` / `-i` | `CaseMatching::Ignore` | None |
-| Respect | `CaseRespect` / `+i` | `CaseMatching::Respect` | None |
+| Mode            | fzf                  | nucleo                  | Gap  |
+| --------------- | -------------------- | ----------------------- | ---- |
+| Smart (default) | `CaseSmart`          | `CaseMatching::Smart`   | None |
+| Ignore          | `CaseIgnore` / `-i`  | `CaseMatching::Ignore`  | None |
+| Respect         | `CaseRespect` / `+i` | `CaseMatching::Respect` | None |
 
 **fzf implementation:**
+
 ```go
 caseSensitive := caseMode == CaseRespect ||
     caseMode == CaseSmart && text != lowerText
@@ -38,10 +40,10 @@ caseSensitive := caseMode == CaseRespect ||
 
 ## 3. Normalization
 
-| Feature | fzf | nucleo | Gap |
-|---------|-----|--------|-----|
+| Feature               | fzf                    | nucleo                 | Gap  |
+| --------------------- | ---------------------- | ---------------------- | ---- |
 | Unicode normalization | `--literal` to disable | `Normalization::Smart` | None |
-| Smart normalization | Yes | Yes | None |
+| Smart normalization   | Yes                    | Yes                    | None |
 
 **No wrapper needed**.
 
@@ -51,15 +53,15 @@ fzf has a full tiebreaker system. nucleo returns only score.
 
 ### 4.1 Available Criteria
 
-| Criterion | fzf | nucleo | Description |
-|-----------|-----|--------|-------------|
-| `byScore` | Yes | Yes | Match quality (primary) |
-| `byLength` | Yes | **No** | Shorter haystack wins |
-| `byPathname` | Yes | **No** | Match closer to filename wins |
-| `byBegin` | Yes | **No** | Match closer to start wins |
-| `byEnd` | Yes | **No** | Match closer to end wins |
-| `byChunk` | Yes | **No** | Shorter matched span wins |
-| `byIndex` | Yes | **No** | Original order (implicit final) |
+| Criterion    | fzf | nucleo | Description                     |
+| ------------ | --- | ------ | ------------------------------- |
+| `byScore`    | Yes | Yes    | Match quality (primary)         |
+| `byLength`   | Yes | **No** | Shorter haystack wins           |
+| `byPathname` | Yes | **No** | Match closer to filename wins   |
+| `byBegin`    | Yes | **No** | Match closer to start wins      |
+| `byEnd`      | Yes | **No** | Match closer to end wins        |
+| `byChunk`    | Yes | **No** | Shorter matched span wins       |
+| `byIndex`    | Yes | **No** | Original order (implicit final) |
 
 ### 4.2 Scheme Presets
 
@@ -154,15 +156,15 @@ impl Rank {
 
 fzf supports complex query expressions:
 
-| Syntax | Meaning | nucleo |
-|--------|---------|--------|
-| `foo` | Fuzzy match | Yes (default) |
-| `'foo` | Exact match | Yes (`AtomKind::Substring`) |
-| `^foo` | Prefix match | Yes (`AtomKind::Prefix`) |
-| `foo$` | Suffix match | Yes (`AtomKind::Suffix`) |
-| `!foo` | Inverse (exclude) | **No** |
-| `foo \| bar` | OR condition | **No** |
-| `^foo$` | Exact equal | Yes (`AtomKind::Exact`) |
+| Syntax       | Meaning           | nucleo                      |
+| ------------ | ----------------- | --------------------------- |
+| `foo`        | Fuzzy match       | Yes (default)               |
+| `'foo`       | Exact match       | Yes (`AtomKind::Substring`) |
+| `^foo`       | Prefix match      | Yes (`AtomKind::Prefix`)    |
+| `foo$`       | Suffix match      | Yes (`AtomKind::Suffix`)    |
+| `!foo`       | Inverse (exclude) | **No**                      |
+| `foo \| bar` | OR condition      | **No**                      |
+| `^foo$`      | Exact equal       | Yes (`AtomKind::Exact`)     |
 
 ### 5.1 fzf Term Types
 
@@ -181,6 +183,7 @@ const (
 ### 5.2 Wrapper Implementation
 
 For full parity, parse query string and:
+
 1. Split on `|` for OR groups
 2. Check `!` prefix for negation
 3. Check `'`, `^`, `$` for term type
@@ -190,31 +193,35 @@ For full parity, parse query string and:
 
 ## 6. Additional Options
 
-| Option | fzf | nucleo | Priority |
-|--------|-----|--------|----------|
-| `--nth=N` | Match on Nth field | Manual in wrapper | Medium |
-| `--delimiter` | Field separator | Manual split | Medium |
-| `--tac` | Reverse input order | Sort flag | Low |
-| `--track` | Track current item | UI concern | N/A |
+| Option        | fzf                 | nucleo            | Priority |
+| ------------- | ------------------- | ----------------- | -------- |
+| `--nth=N`     | Match on Nth field  | Manual in wrapper | Medium   |
+| `--delimiter` | Field separator     | Manual split      | Medium   |
+| `--tac`       | Reverse input order | Sort flag         | Low      |
+| `--track`     | Track current item  | UI concern        | N/A      |
 
 ## 7. Implementation Roadmap
 
 ### Phase 1: Tiebreakers (HIGH)
+
 - [ ] Implement `Rank` struct with u64 packing
 - [ ] Add `byLength` tiebreaker
 - [ ] Add `byPathname` for path scheme
 - [ ] Add `byIndex` as final tiebreaker
 
 ### Phase 2: Schemes (HIGH)
+
 - [ ] Implement scheme presets (default, path, history)
 - [ ] Map `SearchScheme::Path` to `[score, pathname, length]`
 
 ### Phase 3: Extended Syntax (MEDIUM)
+
 - [ ] Parse `!` negation
 - [ ] Parse `|` OR groups
 - [ ] Combine multi-pattern results
 
 ### Phase 4: Field Matching (LOW)
+
 - [ ] `--nth` equivalent via config
 - [ ] Custom delimiters
 
