@@ -5,7 +5,7 @@ import { listenEvent } from "./events";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { useOsTheme } from "./hooks/use-os-theme";
 
-const DEFAULT_SNAPSHOT: StateSnapshot = { status: "booting", noOfSpells: 0 };
+const DEFAULT_SNAPSHOT: StateSnapshot = { status: "booting", noOfSpells: 0, spellNames: [] };
 
 function App() {
   const [snapshot, setSnapshot] = useState<StateSnapshot>(DEFAULT_SNAPSHOT);
@@ -38,6 +38,11 @@ function App() {
     }
   }, [snapshot.status]);
 
+  const spellNames = useMemo(
+    () => [...snapshot.spellNames].sort((a, b) => a.localeCompare(b)),
+    [snapshot.spellNames]
+  );
+
   return (
     <main className="bg-background flex min-h-screen justify-center p-8 pt-16">
       <div className="flex w-full max-w-md flex-col gap-4">
@@ -60,6 +65,23 @@ function App() {
             <div className="space-y-1">
               <div className="text-muted-foreground text-sm">Loaded spells</div>
               <div className="text-5xl font-bold tabular-nums">{snapshot.noOfSpells}</div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-muted-foreground text-sm">Spell names</div>
+              {spellNames.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {spellNames.map((name) => (
+                    <span
+                      key={name}
+                      className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-semibold uppercase"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted-foreground text-sm">No spells loaded</div>
+              )}
             </div>
             <div className="text-muted-foreground text-sm">
               Status: <span className="text-foreground font-medium">{snapshot.status}</span>

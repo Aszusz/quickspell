@@ -7,6 +7,13 @@ use tauri::AppHandle;
 use crate::events;
 use crate::spells::Spell;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Frame {
+    pub spell_id: String,
+    pub query: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AppStatus {
@@ -22,12 +29,14 @@ pub struct StateSnapshot {
     pub status: AppStatus,
     #[serde(rename = "noOfSpells")]
     pub no_of_spells: usize,
+    pub spell_names: Vec<String>,
 }
 
 #[derive(Debug)]
 struct AppInner {
     status: AppStatus,
     spells: HashMap<String, Spell>,
+    stack: Vec<Frame>,
 }
 
 pub struct AppState {
@@ -40,6 +49,7 @@ impl AppState {
             inner: Mutex::new(AppInner {
                 status: AppStatus::Booting,
                 spells: HashMap::new(),
+                stack: Vec::new(),
             }),
         }
     }
@@ -54,6 +64,10 @@ impl AppState {
         if let Ok(mut inner) = self.inner.lock() {
             inner.status = AppStatus::Ready;
             inner.spells = spells;
+            inner.stack = vec![Frame {
+                spell_id: "quickspell".to_string(),
+                query: String::new(),
+            }];
         }
     }
 
@@ -61,19 +75,35 @@ impl AppState {
         if let Ok(mut inner) = self.inner.lock() {
             inner.status = AppStatus::Error;
             inner.spells.clear();
+            inner.stack.clear();
         }
     }
 
     pub fn snapshot(&self) -> StateSnapshot {
-        let (status, no_of_spells) = if let Ok(inner) = self.inner.lock() {
-            (inner.status, inner.spells.len())
+        let (status, no_of_spells, spell_names) = if let Ok(inner) = self.inner.lock() {
+            (
+                inner.status,
+                inner.spells.len(),
+                inner
+                    .stack
+                    .iter()
+                    .map(|frame| {
+                        inner
+                            .spells
+                            .get(&frame.spell_id)
+                            .map(|spell| spell.name.clone())
+                            .unwrap_or_else(|| frame.spell_id.clone())
+                    })
+                    .collect(),
+            )
         } else {
-            (AppStatus::Error, 0)
+            (AppStatus::Error, 0, Vec::new())
         };
 
         StateSnapshot {
             status,
             no_of_spells,
+            spell_names,
         }
     }
 
