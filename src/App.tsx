@@ -107,6 +107,7 @@ function App() {
               className="w-full pr-14 pl-10"
               placeholder="Type to search..."
               onBlur={handleSearchBlur}
+              onChange={(e) => invoke("set_query", { query: e.target.value })}
             />
             <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs font-medium select-none">
               {snapshot.totalItems}

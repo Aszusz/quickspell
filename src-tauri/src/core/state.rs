@@ -80,6 +80,14 @@ impl AppState {
         inner.spells.get(&frame.spell_id).cloned()
     }
 
+    pub fn set_query(&self, query: String) {
+        if let Ok(mut inner) = self.inner.lock() {
+            if let Some(frame) = inner.stack.last_mut() {
+                frame.query = query;
+            }
+        }
+    }
+
     pub fn snapshot(&self) -> StateSnapshot {
         let (status, no_of_spells, spell_names, top_items, total_items) =
             if let Ok(inner) = self.inner.lock() {
