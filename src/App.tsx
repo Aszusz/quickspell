@@ -1,20 +1,22 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { StateSnapshot } from "./events";
 import { listenEvent } from "./events";
-import { Button } from "./components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { useOsTheme } from "./hooks/use-os-theme";
 
+const DEFAULT_SNAPSHOT: StateSnapshot = { status: "booting", noOfSpells: 0 };
+
 function App() {
-  const [count, setCount] = useState<number>(0);
+  const [snapshot, setSnapshot] = useState<StateSnapshot>(DEFAULT_SNAPSHOT);
 
   useOsTheme();
 
   useEffect(() => {
-    invoke<number>("get_count").then(setCount);
+    invoke<StateSnapshot>("get_state_snapshot").then(setSnapshot).catch(console.error);
 
-    const unlisten = listenEvent("counter-changed", (payload) => {
-      setCount(payload.count);
+    const unlisten = listenEvent("state-snapshot", (payload) => {
+      setSnapshot(payload);
     });
 
     return () => {
@@ -22,32 +24,46 @@ function App() {
     };
   }, []);
 
+  const statusLabel = useMemo(() => {
+    switch (snapshot.status) {
+      case "booting":
+        return "Booting";
+      case "loading":
+        return "Loading spells";
+      case "ready":
+        return "Ready";
+      case "error":
+      default:
+        return "Error";
+    }
+  }, [snapshot.status]);
+
   return (
     <main className="bg-background flex min-h-screen justify-center p-8 pt-16">
       <div className="flex w-full max-w-md flex-col gap-4">
         <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Counter App</h1>
-          <p className="text-muted-foreground text-sm">Rust-managed state with Tauri</p>
+          <h1 className="text-2xl font-semibold tracking-tight">QuickSpell</h1>
+          <p className="text-muted-foreground text-sm">Tauri-powered launcher status</p>
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Counter</CardTitle>
-            <CardDescription>State managed on Rust backend</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center gap-4">
-            <div className="text-6xl font-bold tabular-nums">{count}</div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="lg" onClick={() => invoke("decrement")}>
-                -
-              </Button>
-              <Button size="lg" onClick={() => invoke("increment")}>
-                +
-              </Button>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Backend State</CardTitle>
+              <CardDescription>Live snapshot from the Rust core</CardDescription>
             </div>
-            <Button variant="ghost" onClick={() => invoke("reset")}>
-              Reset
-            </Button>
+            <span className="bg-muted text-foreground rounded-full px-3 py-1 text-xs font-semibold uppercase">
+              {statusLabel}
+            </span>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <div className="space-y-1">
+              <div className="text-muted-foreground text-sm">Loaded spells</div>
+              <div className="text-5xl font-bold tabular-nums">{snapshot.noOfSpells}</div>
+            </div>
+            <div className="text-muted-foreground text-sm">
+              Status: <span className="text-foreground font-medium">{snapshot.status}</span>
+            </div>
           </CardContent>
         </Card>
       </div>

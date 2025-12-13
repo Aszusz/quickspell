@@ -1,6 +1,7 @@
+mod bootstrap;
 mod commands;
-mod counter;
 mod events;
+mod spells;
 mod state;
 
 use state::AppState;
@@ -10,12 +11,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![
-            commands::get_count,
-            commands::increment,
-            commands::decrement,
-            commands::reset
-        ])
+        .setup(|app| {
+            bootstrap::initialize(app);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![commands::get_state_snapshot,])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

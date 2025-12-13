@@ -1,15 +1,9 @@
-use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-#[derive(Clone, Serialize)]
-pub struct CounterChanged {
-    pub count: i32,
-}
+use crate::state::StateSnapshot;
 
-impl CounterChanged {
-    const NAME: &str = "counter-changed";
+pub const STATE_SNAPSHOT_EVENT: &str = "state-snapshot";
 
-    pub fn emit(self, app: &AppHandle) {
-        let _ = app.emit(Self::NAME, self);
-    }
+pub fn emit_state_snapshot(app: &AppHandle, snapshot: StateSnapshot) -> Result<(), tauri::Error> {
+    app.emit(STATE_SNAPSHOT_EVENT, snapshot)
 }

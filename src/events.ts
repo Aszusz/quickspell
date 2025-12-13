@@ -1,11 +1,14 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export interface CounterChanged {
-  count: number;
+export type AppStatus = "booting" | "loading" | "ready" | "error";
+
+export interface StateSnapshot {
+  status: AppStatus;
+  noOfSpells: number;
 }
 
 interface EventMap {
-  "counter-changed": CounterChanged;
+  "state-snapshot": StateSnapshot;
 }
 
 export function listenEvent<K extends keyof EventMap>(

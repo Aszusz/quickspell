@@ -1,0 +1,17 @@
+name: QuickSpell
+id: quickspell
+enabled: false
+provider: "{ ./providers/apps.zsh; ./providers/spells.zsh --enabled; }"
+fzf_options:
+  - '--delimiter=\\t'
+  - "--with-nth=2"
+actions:
+  - name: MAIN
+    if: "{{context.quickspell.selection.type}} == 'APP'"
+    type: CMD
+    cmd: open -a "{{context.quickspell.selection.data}}"
+
+  - name: MAIN
+    if: "{{context.quickspell.selection.type}} == 'SPELL'"
+    type: SPELL
+    spell: "{{context.quickspell.selection.data}}"
