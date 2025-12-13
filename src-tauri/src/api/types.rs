@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -7,8 +7,9 @@ pub const STARTING_SPELL_ID: &str = "search_files";
 
 // AppState
 
+#[derive(Clone)]
 pub struct AppState {
-    pub inner: Mutex<AppInner>,
+    pub inner: Arc<RwLock<AppInner>>,
 }
 
 // AppInner (internal state)
@@ -19,6 +20,7 @@ pub struct AppInner {
     pub spells: HashMap<String, Spell>,
     pub stack: Vec<Frame>,
     pub all_items: Vec<String>,
+    pub filtered_items: Vec<String>,
 }
 
 // StateSnapshot
@@ -78,6 +80,48 @@ pub enum Action {
     },
 }
 
+// SearchConfig
+
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchScheme {
+    #[default]
+    Plain,
+    Path,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchMode {
+    #[default]
+    Fuzzy,
+    Exact,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchConfig {
+    #[serde(default = "default_field")]
+    pub field: usize, // 1-indexed
+    #[serde(default)]
+    pub scheme: SearchScheme,
+    #[serde(default)]
+    pub mode: SearchMode,
+}
+
+fn default_field() -> usize {
+    1
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            field: 1,
+            scheme: SearchScheme::Plain,
+            mode: SearchMode::Fuzzy,
+        }
+    }
+}
+
 // Spell
 
 #[derive(Debug, Clone, Deserialize)]
@@ -94,7 +138,7 @@ pub struct Spell {
     #[serde(default)]
     pub preview: Option<String>,
     #[serde(default)]
-    pub fzf_options: Vec<String>,
+    pub search: Option<SearchConfig>,
     #[serde(default)]
     pub actions: Vec<Action>,
 }

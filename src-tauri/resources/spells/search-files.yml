@@ -4,11 +4,10 @@ enabled: true
 alias: sf
 provider: "./providers/files.zsh"
 is_streaming: true
-fzf_options:
-  - '--delimiter=\\t'
-  - "--with-nth=3"
-  - "--scheme=path"
-  - "--exact"
+search:
+  field: 3
+  scheme: path
+  mode: exact
 preview: "echo Path: {{context.search_files.selection.data}}"
 actions:
   - name: MAIN

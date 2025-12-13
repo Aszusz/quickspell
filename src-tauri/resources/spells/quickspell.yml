@@ -2,9 +2,10 @@ name: QuickSpell
 id: quickspell
 enabled: false
 provider: "{ ./providers/apps.zsh; ./providers/spells.zsh --enabled; }"
-fzf_options:
-  - '--delimiter=\\t'
-  - "--with-nth=2"
+search:
+  field: 2
+  scheme: plain
+  mode: fuzzy
 actions:
   - name: MAIN
     if: "{{context.quickspell.selection.type}} == 'APP'"
