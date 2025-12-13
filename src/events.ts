@@ -5,6 +5,7 @@ export type AppStatus = "booting" | "loading" | "ready" | "error";
 export interface StateSnapshot {
   status: AppStatus;
   noOfSpells: number;
+  totalItems: number;
   spellNames: string[];
   topItems: string[];
 }

@@ -23,7 +23,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .setup(|app| {
-            bootstrap::initialize(app);
             setup_tray(app)?;
             #[cfg(target_os = "macos")]
             {
@@ -51,19 +50,16 @@ pub fn run() {
                 return;
             }
 
-            match event {
-                WindowEvent::Focused(false) => {
-                    let _ = window.hide();
-                }
-                WindowEvent::CloseRequested { api, .. } => {
-                    // Keep the app running in the background when the window is closed.
-                    let _ = window.hide();
-                    api.prevent_close();
-                }
-                _ => {}
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                // Keep the app running in the background when the window is closed.
+                let _ = window.hide();
+                api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![commands::get_state_snapshot,])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_state_snapshot,
+            commands::start_app,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -17,8 +17,9 @@ import { Item, ItemGroup, ItemSeparator, ItemTitle } from "./components/ui/item"
 import { Kbd, KbdGroup } from "./components/ui/kbd";
 
 const DEFAULT_SNAPSHOT: StateSnapshot = {
-  status: "booting",
+  status: "loading",
   noOfSpells: 0,
+  totalItems: 0,
   spellNames: [],
   topItems: [],
 };
@@ -30,14 +31,28 @@ function App() {
   useOsTheme();
 
   useEffect(() => {
-    invoke<StateSnapshot>("get_state_snapshot").then(setSnapshot).catch(console.error);
+    let cleanup: (() => void) | undefined;
 
-    const unlisten = listenEvent("state-snapshot", (payload) => {
-      setSnapshot(payload);
-    });
+    const bootstrap = async () => {
+      try {
+        const unlisten = await listenEvent("state-snapshot", (payload) => {
+          setSnapshot(payload);
+        });
+        cleanup = unlisten;
+
+        await invoke("start_app");
+
+        const latest = await invoke<StateSnapshot>("get_state_snapshot");
+        setSnapshot(latest);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    bootstrap();
 
     return () => {
-      unlisten.then((fn) => fn());
+      cleanup?.();
     };
   }, []);
 
@@ -89,10 +104,13 @@ function App() {
             <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <Input
               ref={searchRef}
-              className="w-full pl-10"
+              className="w-full pr-14 pl-10"
               placeholder="Type to search..."
               onBlur={handleSearchBlur}
             />
+            <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs font-medium select-none">
+              {snapshot.totalItems}
+            </span>
           </div>
 
           <section className="flex min-h-0 flex-1 flex-col">

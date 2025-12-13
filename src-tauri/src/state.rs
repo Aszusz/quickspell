@@ -35,6 +35,8 @@ pub struct StateSnapshot {
     pub no_of_spells: usize,
     pub spell_names: Vec<String>,
     pub top_items: Vec<String>,
+    #[serde(rename = "totalItems")]
+    pub total_items: usize,
 }
 
 #[derive(Debug)]
@@ -61,36 +63,28 @@ impl AppState {
         }
     }
 
-    pub fn set_status(&self, status: AppStatus) {
-        if let Ok(mut inner) = self.inner.lock() {
-            inner.status = status;
-        }
+    pub fn begin_loading_with_spells(&self, spells: HashMap<String, Spell>) -> Result<(), String> {
+        let mut inner = self.inner.lock().map_err(|_| "state lock poisoned")?;
+        inner.status = AppStatus::Loading;
+        inner.spells = spells;
+        inner.stack = vec![Frame {
+            spell_id: STARTING_SPELL_ID.to_string(),
+            query: String::new(),
+        }];
+        inner.all_items.clear();
+        Ok(())
     }
 
-    pub fn set_ready_with_spells(
-        &self,
-        spells: HashMap<String, Spell>,
-        resources_dir: &Path,
-    ) -> Result<(), String> {
-        {
-            let mut inner = self.inner.lock().map_err(|_| "state lock poisoned")?;
-            inner.status = AppStatus::Loading;
-            inner.spells = spells;
-            inner.stack = vec![Frame {
-                spell_id: STARTING_SPELL_ID.to_string(),
-                query: String::new(),
-            }];
-            inner.all_items.clear();
-        }
-
+    pub fn finish_loading_with_items(&self, resources_dir: &Path) -> Result<(), String> {
         let items = self.load_items_for_current_frame(resources_dir)?;
 
         if let Ok(mut inner) = self.inner.lock() {
             inner.all_items = items;
             inner.status = AppStatus::Ready;
+            Ok(())
+        } else {
+            Err("state lock poisoned".to_string())
         }
-
-        Ok(())
     }
 
     pub fn set_error(&self) {
@@ -103,32 +97,35 @@ impl AppState {
     }
 
     pub fn snapshot(&self) -> StateSnapshot {
-        let (status, no_of_spells, spell_names, top_items) = if let Ok(inner) = self.inner.lock() {
-            (
-                inner.status,
-                inner.spells.len(),
-                inner
-                    .stack
-                    .iter()
-                    .map(|frame| {
-                        inner
-                            .spells
-                            .get(&frame.spell_id)
-                            .map(|spell| spell.name.clone())
-                            .unwrap_or_else(|| frame.spell_id.clone())
-                    })
-                    .collect(),
-                inner.all_items.iter().take(20).cloned().collect(),
-            )
-        } else {
-            (AppStatus::Error, 0, Vec::new(), Vec::new())
-        };
+        let (status, no_of_spells, spell_names, top_items, total_items) =
+            if let Ok(inner) = self.inner.lock() {
+                (
+                    inner.status,
+                    inner.spells.len(),
+                    inner
+                        .stack
+                        .iter()
+                        .map(|frame| {
+                            inner
+                                .spells
+                                .get(&frame.spell_id)
+                                .map(|spell| spell.name.clone())
+                                .unwrap_or_else(|| frame.spell_id.clone())
+                        })
+                        .collect(),
+                    inner.all_items.iter().take(20).cloned().collect(),
+                    inner.all_items.len(),
+                )
+            } else {
+                (AppStatus::Error, 0, Vec::new(), Vec::new(), 0)
+            };
 
         StateSnapshot {
             status,
             no_of_spells,
             spell_names,
             top_items,
+            total_items,
         }
     }
 
