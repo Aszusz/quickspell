@@ -10,8 +10,9 @@ use tauri::AppHandle;
 
 use crate::api::events;
 use crate::api::types::{
-    AppInner, AppState, AppStatus, Frame, Spell, StateSnapshot, STARTING_SPELL_ID,
+    Action, AppInner, AppState, AppStatus, Frame, Spell, StateSnapshot, STARTING_SPELL_ID,
 };
+use crate::core::template;
 
 impl AppState {
     pub fn new() -> Self {
@@ -328,6 +329,59 @@ impl AppState {
         let _ = child.wait();
         Ok(())
     }
+
+    pub fn invoke_action(&self, label: &str, resources_dir: &Path) -> Result<(), String> {
+        let (frames, actions) = {
+            let inner = self.inner.read().map_err(|_| "state lock poisoned")?;
+            let frames = inner.stack.clone();
+            let spell = inner
+                .stack
+                .last()
+                .and_then(|frame| inner.spells.get(&frame.spell_id))
+                .ok_or_else(|| "no active spell".to_string())?;
+            (frames, spell.actions.clone())
+        };
+
+        for action in actions {
+            let action_label = action_name(&action).unwrap_or("MAIN");
+            if action_label != label {
+                continue;
+            }
+
+            if !condition_passes(action_condition(&action), &frames)? {
+                continue;
+            }
+
+            match action {
+                Action::Spell { .. } => return Ok(()),
+                Action::Cmd { cmd, .. } => {
+                    let rendered_cmd =
+                        template::resolve_template(&cmd, &frames).map_err(|e| match e {
+                            template::TemplateError::Render(err) => err,
+                        })?;
+
+                    if rendered_cmd.trim().is_empty() {
+                        return Err("resolved command is empty".to_string());
+                    }
+
+                    let status = std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(&rendered_cmd)
+                        .current_dir(resources_dir)
+                        .status()
+                        .map_err(|err| format!("failed to run action command: {err}"))?;
+
+                    if status.success() {
+                        return Ok(());
+                    } else {
+                        return Err(format!("action command exited with status {status}"));
+                    }
+                }
+            }
+        }
+
+        Err(format!("no matching action for label {label}"))
+    }
 }
 
 impl Default for AppState {
@@ -390,4 +444,62 @@ fn clamp_selection(frame: &mut Frame) {
             .selected_idx
             .min(frame.filtered_items.len().saturating_sub(1));
     }
+}
+
+fn action_name(action: &Action) -> Option<&str> {
+    match action {
+        Action::Cmd { name, .. } | Action::Spell { name, .. } => name.as_deref(),
+    }
+}
+
+fn action_condition(action: &Action) -> Option<&str> {
+    match action {
+        Action::Cmd { condition, .. } | Action::Spell { condition, .. } => condition.as_deref(),
+    }
+}
+
+fn condition_passes(condition: Option<&str>, frames: &[Frame]) -> Result<bool, String> {
+    let Some(raw) = condition else {
+        return Ok(true);
+    };
+
+    let rendered = template::resolve_template(raw, frames).map_err(|e| match e {
+        template::TemplateError::Render(err) => err,
+    })?;
+
+    let text = rendered.trim();
+
+    if text.is_empty() {
+        return Ok(true);
+    }
+
+    if let Some((lhs, rhs)) = text.split_once("==") {
+        return Ok(normalize_condition_value(lhs) == normalize_condition_value(rhs));
+    }
+
+    if let Some((lhs, rhs)) = text.split_once("!=") {
+        return Ok(normalize_condition_value(lhs) != normalize_condition_value(rhs));
+    }
+
+    match text.to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "y" => Ok(true),
+        "false" | "0" | "no" | "n" => Ok(false),
+        _ => Ok(!text.is_empty()),
+    }
+}
+
+fn normalize_condition_value(value: &str) -> String {
+    strip_matching_quotes(value.trim()).to_string()
+}
+
+fn strip_matching_quotes(value: &str) -> &str {
+    if value.len() >= 2 {
+        let bytes = value.as_bytes();
+        if (bytes[0] == b'"' && bytes[value.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[value.len() - 1] == b'\'')
+        {
+            return &value[1..value.len() - 1];
+        }
+    }
+    value
 }

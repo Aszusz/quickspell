@@ -50,7 +50,7 @@ pub fn initialize(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_resource_dirs(app: &AppHandle) -> (PathBuf, PathBuf) {
+pub fn resolve_resource_dirs(app: &AppHandle) -> (PathBuf, PathBuf) {
     let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/spells");
 
     let resource_dir = ["resources/spells", "spells"].iter().find_map(|relative| {
@@ -71,6 +71,11 @@ fn resolve_resource_dirs(app: &AppHandle) -> (PathBuf, PathBuf) {
         .unwrap_or_else(|| spells_dir.clone());
 
     (spells_dir, resources_dir)
+}
+
+pub fn resolve_resources_dir(app: &AppHandle) -> PathBuf {
+    let (_, resources_dir) = resolve_resource_dirs(app);
+    resources_dir
 }
 
 fn load_spells_from_dir(dir: &Path) -> Result<HashMap<String, Spell>, SpellLoadError> {

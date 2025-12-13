@@ -74,6 +74,14 @@ function App() {
         e.preventDefault();
         const delta = e.key === "ArrowDown" ? 1 : -1;
         invoke("set_selection_delta", { delta });
+        return;
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void invoke("invoke_action", { label: "MAIN" }).catch((err) => {
+          console.error("failed to invoke MAIN action", err);
+        });
       }
     };
 

@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
 
-pub const STARTING_SPELL_ID: &str = "search_files";
+pub const STARTING_SPELL_ID: &str = "quickspell";
 
 // AppState
 
