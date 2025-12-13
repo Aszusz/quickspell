@@ -1,68 +1,54 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listenEvent } from "./events";
 import { Button } from "./components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "./components/ui/card";
-import { Input } from "./components/ui/input";
-import { Label } from "./components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { useOsTheme } from "./hooks/use-os-theme";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [count, setCount] = useState<number>(0);
 
   useOsTheme();
 
-  async function greet() {
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    invoke<number>("get_count").then(setCount);
+
+    const unlisten = listenEvent("counter-changed", (payload) => {
+      setCount(payload.count);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   return (
     <main className="bg-background flex min-h-screen justify-center p-8 pt-16">
       <div className="flex w-full max-w-md flex-col gap-4">
         <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Zero To Tauri</h1>
-          <p className="text-muted-foreground text-sm">
-            Shadcn theme adapts to your OS preferences
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Counter App</h1>
+          <p className="text-muted-foreground text-sm">Rust-managed state with Tauri</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Greet</CardTitle>
-            <CardDescription>Enter your name to receive a greeting</CardDescription>
+            <CardTitle>Counter</CardTitle>
+            <CardDescription>State managed on Rust backend</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                greet();
-              }}
-            >
-              <div className="grid gap-2">
-                <Label htmlFor="greet-input">Name</Label>
-                <Input
-                  id="greet-input"
-                  value={name}
-                  onChange={(e) => setName(e.currentTarget.value)}
-                  placeholder="Enter a name..."
-                  required
-                />
-              </div>
-            </form>
-          </CardContent>
-          <CardFooter className="flex-col gap-2">
-            <Button type="submit" className="w-full" onClick={greet}>
-              Greet
+          <CardContent className="flex flex-col items-center gap-4">
+            <div className="text-6xl font-bold tabular-nums">{count}</div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="lg" onClick={() => invoke("decrement")}>
+                -
+              </Button>
+              <Button size="lg" onClick={() => invoke("increment")}>
+                +
+              </Button>
+            </div>
+            <Button variant="ghost" onClick={() => invoke("reset")}>
+              Reset
             </Button>
-            <p className="text-muted-foreground min-h-5 text-center text-sm">{greetMsg}</p>
-          </CardFooter>
+          </CardContent>
         </Card>
       </div>
     </main>
