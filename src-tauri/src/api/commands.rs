@@ -19,8 +19,8 @@ pub fn set_query(query: String, handle: AppHandle, state: State<'_, AppState>) {
     state.set_query(query);
     let state = state.inner().clone();
     tauri::async_runtime::spawn(async move {
-        state.filter_items();
-        let snapshot = state.snapshot();
-        let _ = emit_state_snapshot(&handle, snapshot);
+        if state.filter_items() {
+            let _ = emit_state_snapshot(&handle, state.snapshot());
+        }
     });
 }

@@ -19,8 +19,6 @@ pub struct AppInner {
     pub status: AppStatus,
     pub spells: HashMap<String, Spell>,
     pub stack: Vec<Frame>,
-    pub all_items: Vec<String>,
-    pub filtered_items: Vec<String>,
 }
 
 // StateSnapshot
@@ -51,11 +49,12 @@ pub enum AppStatus {
 
 // Frame
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct Frame {
     pub spell_id: String,
     pub query: String,
+    pub all_items: Vec<String>,
+    pub filtered_items: Vec<String>,
 }
 
 // Action

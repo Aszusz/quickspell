@@ -10,7 +10,6 @@ use crate::api::events;
 use crate::api::types::{
     AppInner, AppState, AppStatus, Frame, Spell, StateSnapshot, STARTING_SPELL_ID,
 };
-use crate::core::search;
 
 impl AppState {
     pub fn new() -> Self {
@@ -19,8 +18,6 @@ impl AppState {
                 status: AppStatus::NotStarted,
                 spells: HashMap::new(),
                 stack: Vec::new(),
-                all_items: Vec::new(),
-                filtered_items: Vec::new(),
             })),
         }
     }
@@ -38,9 +35,9 @@ impl AppState {
         inner.stack = vec![Frame {
             spell_id: STARTING_SPELL_ID.to_string(),
             query: String::new(),
+            all_items: Vec::new(),
+            filtered_items: Vec::new(),
         }];
-        inner.all_items.clear();
-        inner.filtered_items.clear();
         Ok(())
     }
 
@@ -48,8 +45,10 @@ impl AppState {
         let items = self.load_items_for_current_frame(resources_dir)?;
 
         if let Ok(mut inner) = self.inner.write() {
-            inner.filtered_items = items.clone();
-            inner.all_items = items;
+            if let Some(frame) = inner.stack.last_mut() {
+                frame.all_items = items.clone();
+                frame.filtered_items = items;
+            }
             inner.status = AppStatus::Ready;
             Ok(())
         } else {
@@ -62,8 +61,6 @@ impl AppState {
             inner.status = AppStatus::Error;
             inner.spells.clear();
             inner.stack.clear();
-            inner.all_items.clear();
-            inner.filtered_items.clear();
         }
     }
 
@@ -75,8 +72,10 @@ impl AppState {
 
     pub fn append_items(&self, new_items: Vec<String>) {
         if let Ok(mut inner) = self.inner.write() {
-            inner.filtered_items.extend(new_items.clone());
-            inner.all_items.extend(new_items);
+            if let Some(frame) = inner.stack.last_mut() {
+                frame.all_items.extend(new_items.clone());
+                frame.filtered_items.extend(new_items);
+            }
         }
     }
 
@@ -94,65 +93,79 @@ impl AppState {
         }
     }
 
-    pub fn filter_items(&self) {
+    pub fn filter_items(&self) -> bool {
         let start = Instant::now();
 
-        // Read lock: copy data needed for filtering
-        let (all_items, query, search_config) = {
+        let (all_items, query, config) = {
             let inner = match self.inner.read() {
-                Ok(inner) => inner,
-                Err(_) => return,
+                Ok(i) => i,
+                Err(_) => return false,
             };
             let frame = match inner.stack.last() {
                 Some(f) => f,
-                None => return,
+                None => return false,
             };
-            let config = inner
+            let cfg = inner
                 .spells
                 .get(&frame.spell_id)
                 .and_then(|s| s.search.clone());
-            (inner.all_items.clone(), frame.query.clone(), config)
-        }; // read lock released
-        let copy_time = start.elapsed();
-        let item_count = all_items.len();
+            (frame.all_items.clone(), frame.query.clone(), cfg)
+        };
 
-        // Filter without holding any lock
-        let filter_start = Instant::now();
-        let filtered = if query.is_empty() {
+        let item_count = all_items.len();
+        let filtered: Vec<String> = if query.is_empty() {
             all_items
-        } else if let Some(config) = search_config {
-            search::filter_items(&all_items, &query, &config)
+        } else if let Some(cfg) = config {
+            crate::core::search::filter_items(&all_items, &query, &cfg)
                 .into_iter()
                 .cloned()
                 .collect()
         } else {
             all_items
         };
-        let filter_time = filter_start.elapsed();
         let result_count = filtered.len();
 
-        // Write lock: store filtered results (brief)
-        let write_start = Instant::now();
-        if let Ok(mut inner) = self.inner.write() {
-            inner.filtered_items = filtered;
-        }
-        let write_time = write_start.elapsed();
+        let applied = if let Ok(mut inner) = self.inner.write() {
+            if let Some(frame) = inner.stack.last_mut() {
+                if frame.query == query {
+                    frame.filtered_items = filtered;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
 
         println!(
-            "[filter] query={:?} items={} results={} | copy={:?} filter={:?} write={:?} total={:?}",
+            "[filter] query={:?} items={} results={} applied={} time={:?}",
             query,
             item_count,
             result_count,
-            copy_time,
-            filter_time,
-            write_time,
+            applied,
             start.elapsed()
         );
+
+        applied
     }
 
     pub fn snapshot(&self) -> StateSnapshot {
         let (status, no_of_spells, spell_names, top_items, total_items) =
             if let Ok(inner) = self.inner.read() {
+                let (top, total) = inner
+                    .stack
+                    .last()
+                    .map(|f| {
+                        (
+                            f.filtered_items.iter().take(20).cloned().collect(),
+                            f.filtered_items.len(),
+                        )
+                    })
+                    .unwrap_or((Vec::new(), 0));
+
                 (
                     inner.status,
                     inner.spells.len(),
@@ -167,8 +180,8 @@ impl AppState {
                                 .unwrap_or_else(|| frame.spell_id.clone())
                         })
                         .collect(),
-                    inner.filtered_items.iter().take(20).cloned().collect(),
-                    inner.filtered_items.len(),
+                    top,
+                    total,
                 )
             } else {
                 (AppStatus::Error, 0, Vec::new(), Vec::new(), 0)
