@@ -22,6 +22,9 @@ const DEFAULT_SNAPSHOT: StateSnapshot = {
   totalItems: 0,
   spellNames: [],
   topItems: [],
+  query: "",
+  selectedIndex: 0,
+  selectedItem: null,
 };
 
 function App() {
@@ -63,6 +66,19 @@ function App() {
 
   useEffect(() => {
     searchRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const delta = e.key === "ArrowDown" ? 1 : -1;
+        invoke("set_selection_delta", { delta });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const handleSearchBlur = () => {
@@ -107,7 +123,13 @@ function App() {
               className="w-full pr-14 pl-10"
               placeholder="Type to search..."
               onBlur={handleSearchBlur}
-              onChange={(e) => invoke("set_query", { query: e.target.value })}
+              value={snapshot.query}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Optimistically update local snapshot to keep typing responsive.
+                setSnapshot((prev) => ({ ...prev, query: value }));
+                invoke("set_query", { query: value });
+              }}
             />
             <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs font-medium select-none">
               {snapshot.totalItems}
@@ -120,7 +142,13 @@ function App() {
                 <ItemGroup>
                   {snapshot.topItems.map((item, idx) => (
                     <React.Fragment key={`${item}-${idx}`}>
-                      <Item size="sm" variant="muted" className="rounded-none border-0 px-3 py-2">
+                      <Item
+                        size="sm"
+                        variant="muted"
+                        className="data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary/50 rounded-none border-0 px-3 py-2"
+                        data-selected={snapshot.selectedIndex === idx}
+                        aria-selected={snapshot.selectedIndex === idx}
+                      >
                         <ItemTitle className="font-mono text-xs">{item}</ItemTitle>
                       </Item>
                       {idx < snapshot.topItems.length - 1 ? <ItemSeparator /> : null}

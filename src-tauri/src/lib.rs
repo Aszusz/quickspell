@@ -65,6 +65,7 @@ pub fn run() {
             api::commands::get_state_snapshot,
             api::commands::start_app,
             api::commands::set_query,
+            api::commands::set_selection_delta,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

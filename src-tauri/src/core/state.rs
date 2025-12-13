@@ -39,6 +39,7 @@ impl AppState {
             query: String::new(),
             all_items: Vec::new(),
             filtered_items: Vec::new(),
+            selected_idx: 0,
         }];
         Ok(())
     }
@@ -91,6 +92,7 @@ impl AppState {
         if let Ok(mut inner) = self.inner.write() {
             if let Some(frame) = inner.stack.last_mut() {
                 frame.query = query;
+                frame.selected_idx = 0;
             }
         }
     }
@@ -128,15 +130,13 @@ impl AppState {
         let result_count = filtered.len();
 
         let applied = if let Ok(mut inner) = self.inner.write() {
-            if let Some(frame) = inner.stack.last_mut() {
-                if frame.query == query {
+            match inner.stack.last_mut() {
+                Some(frame) if frame.query == query => {
                     frame.filtered_items = filtered;
+                    clamp_selection(frame);
                     true
-                } else {
-                    false
                 }
-            } else {
-                false
+                _ => false,
             }
         } else {
             false
@@ -152,39 +152,64 @@ impl AppState {
     }
 
     pub fn snapshot(&self) -> StateSnapshot {
-        let (status, no_of_spells, spell_names, top_items, total_items) =
-            if let Ok(inner) = self.inner.read() {
-                let (top, total) = inner
-                    .stack
-                    .last()
-                    .map(|f| {
-                        (
-                            f.filtered_items.iter().take(20).cloned().collect(),
-                            f.filtered_items.len(),
-                        )
-                    })
-                    .unwrap_or((Vec::new(), 0));
+        let (
+            status,
+            no_of_spells,
+            spell_names,
+            top_items,
+            total_items,
+            query,
+            selected_idx,
+            selected_item,
+        ) = if let Ok(inner) = self.inner.read() {
+            let (top, total, query, selected_idx, selected_item) = inner
+                .stack
+                .last()
+                .map(|f| {
+                    let clamped_idx = f.selected_idx.min(f.filtered_items.len().saturating_sub(1));
+                    let selected = f.filtered_items.get(clamped_idx).cloned();
+                    (
+                        f.filtered_items.iter().take(20).cloned().collect(),
+                        f.filtered_items.len(),
+                        f.query.clone(),
+                        clamped_idx,
+                        selected,
+                    )
+                })
+                .unwrap_or((Vec::new(), 0, String::new(), 0, None));
 
-                (
-                    inner.status,
-                    inner.spells.len(),
-                    inner
-                        .stack
-                        .iter()
-                        .map(|frame| {
-                            inner
-                                .spells
-                                .get(&frame.spell_id)
-                                .map(|spell| spell.name.clone())
-                                .unwrap_or_else(|| frame.spell_id.clone())
-                        })
-                        .collect(),
-                    top,
-                    total,
-                )
-            } else {
-                (AppStatus::Error, 0, Vec::new(), Vec::new(), 0)
-            };
+            (
+                inner.status,
+                inner.spells.len(),
+                inner
+                    .stack
+                    .iter()
+                    .map(|frame| {
+                        inner
+                            .spells
+                            .get(&frame.spell_id)
+                            .map(|spell| spell.name.clone())
+                            .unwrap_or_else(|| frame.spell_id.clone())
+                    })
+                    .collect(),
+                top,
+                total,
+                query,
+                selected_idx,
+                selected_item,
+            )
+        } else {
+            (
+                AppStatus::Error,
+                0,
+                Vec::new(),
+                Vec::new(),
+                0,
+                String::new(),
+                0,
+                None,
+            )
+        };
 
         StateSnapshot {
             status,
@@ -192,11 +217,32 @@ impl AppState {
             spell_names,
             top_items,
             total_items,
+            query,
+            selected_index: selected_idx,
+            selected_item,
         }
     }
 
     pub fn emit_snapshot(&self, app: &AppHandle) -> Result<(), tauri::Error> {
         events::emit_state_snapshot(app, self.snapshot())
+    }
+
+    pub fn set_selection_delta(&self, delta: isize) -> bool {
+        if let Ok(mut inner) = self.inner.write() {
+            if let Some(frame) = inner.stack.last_mut() {
+                let len = frame.filtered_items.len();
+                if len == 0 {
+                    frame.selected_idx = 0;
+                    return true;
+                }
+
+                let current = frame.selected_idx.min(len.saturating_sub(1));
+                let next = (current as isize + delta).clamp(0, (len.saturating_sub(1)) as isize);
+                frame.selected_idx = next as usize;
+                return true;
+            }
+        }
+        false
     }
 
     fn load_items_for_current_frame(&self, resources_dir: &Path) -> Result<Vec<String>, String> {
@@ -334,4 +380,14 @@ fn resolve_log_path() -> std::io::Result<std::path::PathBuf> {
 
     base.map(|p| p.join("quickspell.log"))
         .ok_or_else(|| std::io::Error::other("could not resolve log directory for quickspell"))
+}
+
+fn clamp_selection(frame: &mut Frame) {
+    if frame.filtered_items.is_empty() {
+        frame.selected_idx = 0;
+    } else {
+        frame.selected_idx = frame
+            .selected_idx
+            .min(frame.filtered_items.len().saturating_sub(1));
+    }
 }

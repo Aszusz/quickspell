@@ -24,3 +24,11 @@ pub fn set_query(query: String, handle: AppHandle, state: State<'_, AppState>) {
         }
     });
 }
+
+#[tauri::command]
+pub fn set_selection_delta(delta: isize, handle: AppHandle, state: State<'_, AppState>) {
+    let changed = state.set_selection_delta(delta);
+    if changed {
+        let _ = emit_state_snapshot(&handle, state.snapshot());
+    }
+}

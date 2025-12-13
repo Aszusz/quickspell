@@ -8,6 +8,9 @@ export interface StateSnapshot {
   totalItems: number;
   spellNames: string[];
   topItems: string[];
+  query: string;
+  selectedIndex: number;
+  selectedItem: string | null;
 }
 
 interface EventMap {

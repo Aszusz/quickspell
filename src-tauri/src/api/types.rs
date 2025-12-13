@@ -31,6 +31,11 @@ pub struct StateSnapshot {
     pub no_of_spells: usize,
     pub spell_names: Vec<String>,
     pub top_items: Vec<String>,
+    pub query: String,
+    #[serde(rename = "selectedIndex")]
+    pub selected_index: usize,
+    #[serde(rename = "selectedItem")]
+    pub selected_item: Option<String>,
     #[serde(rename = "totalItems")]
     pub total_items: usize,
 }
@@ -55,6 +60,7 @@ pub struct Frame {
     pub query: String,
     pub all_items: Vec<String>,
     pub filtered_items: Vec<String>,
+    pub selected_idx: usize,
 }
 
 // Action
