@@ -2871,6 +2871,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "quickspell"
+version = "0.1.0"
+dependencies = [
+ "nucleo-matcher",
+ "rayon",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5312,22 +5328,6 @@ dependencies = [
  "static_assertions",
  "winnow 0.7.13",
  "zvariant",
-]
-
-[[package]]
-name = "zero-to-tauri"
-version = "0.1.0"
-dependencies = [
- "nucleo-matcher",
- "rayon",
- "serde",
- "serde_json",
- "serde_yaml",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "unicode-normalization",
 ]
 
 [[package]]
