@@ -1,8 +1,10 @@
+use std::borrow::Cow;
 use std::cell::RefCell;
 
 use nucleo_matcher::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use rayon::prelude::*;
+use unicode_normalization::UnicodeNormalization;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Scheme {
@@ -69,6 +71,16 @@ impl Rank {
             ((score_inv as u64) << 48) | ((pathname as u64) << 32) | ((length as u64) << 16);
         Self { points, index }
     }
+
+    fn new_path(score: u32, pathname: u32, length: usize, index: usize) -> Self {
+        let score_inv = (u16::MAX as u32).saturating_sub(score.min(u16::MAX as u32)) as u16;
+        let pathname = pathname.min(u16::MAX as u32) as u16;
+        let length = length.min(u16::MAX as usize) as u16;
+        // Path scheme prioritizes pathname distance, then score, then length.
+        let points =
+            ((pathname as u64) << 48) | ((score_inv as u64) << 32) | ((length as u64) << 16);
+        Self { points, index }
+    }
 }
 
 fn cmp_rank(a: &Rank, b: &Rank) -> std::cmp::Ordering {
@@ -113,6 +125,14 @@ fn ascii_lower(b: u8) -> u8 {
     }
 }
 
+fn normalize_nfd<'a>(text: &'a str) -> Cow<'a, str> {
+    if text.is_ascii() {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(text.nfd().collect::<String>())
+    }
+}
+
 fn basename_substring_start(
     haystack: &str,
     query_lower: &[u8],
@@ -151,11 +171,18 @@ pub fn filter_items<'a>(items: &'a [String], query: &str, options: &Options) -> 
         Mode::Fuzzy => AtomKind::Fuzzy,
     };
 
-    let query_lower = query.to_ascii_lowercase();
+    // Normalize query to NFD so it matches macOS filesystem form.
+    let query = query.nfd().collect::<String>();
+    let query_lower = query.to_lowercase();
     let query_bytes = query_lower.as_bytes();
     let query_is_ascii = query.is_ascii();
 
-    let pattern = Pattern::new(query, CaseMatching::Ignore, Normalization::Smart, atom_kind);
+    let pattern = Pattern::new(
+        &query,
+        CaseMatching::Ignore,
+        Normalization::Smart,
+        atom_kind,
+    );
     let field_idx = options.field.saturating_sub(1);
     let use_path = matches!(options.scheme, Scheme::Path);
 
@@ -164,6 +191,7 @@ pub fn filter_items<'a>(items: &'a [String], query: &str, options: &Options) -> 
         .enumerate()
         .filter_map(|(idx, item)| {
             let haystack = item.split('\t').nth(field_idx).unwrap_or(item);
+            let haystack_norm = normalize_nfd(haystack);
             let matcher_tls = if use_path {
                 &MATCHER_PATH
             } else {
@@ -173,20 +201,36 @@ pub fn filter_items<'a>(items: &'a [String], query: &str, options: &Options) -> 
                 let mut ctx = cell.borrow_mut();
                 let MatcherCtx { matcher, buf } = &mut *ctx;
 
-                let haystack_str = Utf32Str::new(haystack, buf);
-                let score = pattern.score(haystack_str, matcher)?;
-
-                let (length, pathname) = if use_path {
-                    let (len, last_delim) = path_metrics(haystack);
-                    let begin =
-                        basename_substring_start(haystack, query_bytes, query_is_ascii, last_delim)
-                            .unwrap_or(0);
-                    (len, pathname_distance(last_delim, begin))
+                let haystack_str = Utf32Str::new(haystack_norm.as_ref(), buf);
+                let score = if use_path && matches!(options.mode, Mode::Exact) {
+                    // Manual check for exact path mode to handle unicode normalization and ensure a match.
+                    if !haystack_norm.to_lowercase().contains(&query_lower) {
+                        return None;
+                    }
+                    0
                 } else {
-                    (haystack.len(), 0)
+                    pattern.score(haystack_str, matcher)?
                 };
 
-                let rank = Rank::new(score, pathname, length, idx);
+                let (length, pathname) = if use_path {
+                    let (len, last_delim) = path_metrics(haystack_norm.as_ref());
+                    let begin = basename_substring_start(
+                        haystack_norm.as_ref(),
+                        query_bytes,
+                        query_is_ascii,
+                        last_delim,
+                    )
+                    .unwrap_or(0);
+                    (len, pathname_distance(last_delim, begin))
+                } else {
+                    (haystack_norm.len(), 0)
+                };
+
+                let rank = if use_path {
+                    Rank::new_path(score, pathname, length, idx)
+                } else {
+                    Rank::new(score, pathname, length, idx)
+                };
                 Some((rank, item))
             })
         })
@@ -225,10 +269,10 @@ mod tests {
     #[test]
     fn path_scheme_prefers_basename_exact_match() {
         let items = vec![
-            "FILE\tRepositoryPathFieldProperty.nib\t/Users/adrian/Downloads/Xcode.app/Contents/PlugIns/IDESourceControl.ideplugin/Contents/Resources/RepositoryPathFieldProperty.nib".to_string(),
-            "FILE\tRepositoryBrowserViewController.nib\t/Users/adrian/Downloads/Xcode.app/Contents/PlugIns/IDESourceControl.ideplugin/Contents/Resources/RepositoryBrowserViewController.nib".to_string(),
-            "FILE\trepository-request.graphql\t/Users/adrian/Downloads/Xcode.app/Contents/SharedFrameworks/XCSourceControl.framework/Versions/A/XPCServices/repository-request.graphql".to_string(),
-            "DIR\trepos\t/Users/adrian/MEGA/repos/".to_string(),
+            "FILE\tRepositoryPathFieldProperty.nib\t/tmp/demo/RepositoryPathFieldProperty.nib".to_string(),
+            "FILE\tRepositoryBrowserViewController.nib\t/tmp/demo/RepositoryBrowserViewController.nib".to_string(),
+            "FILE\trepository-request.graphql\t/tmp/demo/nested/repository-request.graphql".to_string(),
+            "DIR\trepos\t/tmp/demo/repos/".to_string(),
         ];
 
         let options = Options {
@@ -240,7 +284,79 @@ mod tests {
         let results = filter_items(&items, "repos", &options);
         assert_eq!(
             results.first().map(|s| s.as_str()),
-            Some("DIR\trepos\t/Users/adrian/MEGA/repos/")
+            Some("DIR\trepos\t/tmp/demo/repos/")
+        );
+    }
+
+    #[test]
+    fn matches_unicode_query_in_path() {
+        let items = vec!["FILE\tksięgowość\t/home/user/księgowość/report.txt".to_string()];
+        let options = Options {
+            field: 3,
+            scheme: Scheme::Path,
+            mode: Mode::Exact,
+        };
+
+        let results = filter_items(&items, "księ", &options);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn matches_unicode_nfd_path() {
+        let nfd = "ksi\u{0065}\u{0328}gowo\u{015b}\u{0063}\u{0301}";
+        let items = vec![format!("FILE\t{}\t/home/user/{}/report.txt", nfd, nfd)];
+        let options = Options {
+            field: 3,
+            scheme: Scheme::Path,
+            mode: Mode::Exact,
+        };
+
+        let results = filter_items(&items, "księ", &options);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn directory_ranks_before_files_in_same_path_segment() {
+        let dir = "/home/user/księgowość/";
+        let file1 = "/home/user/księgowość/report.txt";
+        let file2 = "/home/user/księgowość/notes.txt";
+        let items = vec![
+            format!("DIR\tksięgowość\t{dir}"),
+            format!("FILE\treport\t{file1}"),
+            format!("FILE\tnotes\t{file2}"),
+        ];
+        let options = Options {
+            field: 3,
+            scheme: Scheme::Path,
+            mode: Mode::Exact,
+        };
+
+        let results = filter_items(&items, "księ", &options);
+        let first = results.first().map(|s| s.as_str()).unwrap_or("");
+        assert!(first.contains(dir));
+    }
+
+    #[test]
+    fn mega_directory_beats_deeper_files() {
+        let dir = "/tmp/demo/księgowość/";
+        let file1 = "/tmp/demo/księgowość/report.txt";
+        let file2 = "/tmp/demo/księgowość/reports/2024/q1.pdf";
+        let items = vec![
+            format!("DIR\tksięgowość\t{dir}"),
+            format!("FILE\treport\t{file1}"),
+            format!("FILE\tq1\t{file2}"),
+        ];
+        let options = Options {
+            field: 3,
+            scheme: Scheme::Path,
+            mode: Mode::Exact,
+        };
+
+        let results = filter_items(&items, "księ", &options);
+        let ordered: Vec<_> = results.into_iter().cloned().collect();
+        assert_eq!(
+            ordered.first().map(|s| s.as_str()),
+            Some(format!("DIR\tksięgowość\t{dir}").as_str())
         );
     }
 }
