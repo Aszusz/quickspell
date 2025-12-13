@@ -15,6 +15,7 @@
         "title": "Zero To Tauri",
         "width": 800,
         "height": 600,
+        "visible": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,

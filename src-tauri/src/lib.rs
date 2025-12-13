@@ -10,6 +10,7 @@ use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
 use api::types::AppState;
 
 const MAIN_WINDOW_LABEL: &str = "main";
+const MAIN_TRAY_ID: &str = "main-tray";
 const TRAY_MENU_SHOW: &str = "tray-show";
 const TRAY_MENU_QUIT: &str = "tray-quit";
 const GLOBAL_HOTKEY_TOGGLE: &str = "ctrl+space";
@@ -47,9 +48,17 @@ pub fn run() {
                 return;
             }
 
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    let _ = window.hide();
+                    api.prevent_close();
+                    update_tray_menu(window.app_handle(), false);
+                }
+                WindowEvent::Focused(false) => {
+                    let _ = window.hide();
+                    update_tray_menu(window.app_handle(), false);
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -66,10 +75,10 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .text(TRAY_MENU_QUIT, "Quit")
         .build()?;
 
-    let mut tray_builder = TrayIconBuilder::new()
+    let mut tray_builder = TrayIconBuilder::with_id(MAIN_TRAY_ID)
         .menu(&tray_menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            TRAY_MENU_SHOW => show_main_window(app),
+            TRAY_MENU_SHOW => toggle_main_window(app),
             TRAY_MENU_QUIT => app.exit(0),
             _ => {}
         });
@@ -83,23 +92,30 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        let _ = window.show();
-        let _ = window.set_focus();
+fn update_tray_menu(app: &AppHandle, is_visible: bool) {
+    if let Some(tray) = app.tray_by_id(MAIN_TRAY_ID) {
+        let show_text = if is_visible { "Hide" } else { "Show" };
+        if let Ok(menu) = MenuBuilder::new(app)
+            .text(TRAY_MENU_SHOW, show_text)
+            .text(TRAY_MENU_QUIT, "Quit")
+            .build()
+        {
+            let _ = tray.set_menu(Some(menu));
+        }
     }
 }
 
-#[cfg(desktop)]
 fn toggle_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         match window.is_visible() {
             Ok(true) => {
                 let _ = window.hide();
+                update_tray_menu(app, false);
             }
             _ => {
                 let _ = window.show();
                 let _ = window.set_focus();
+                update_tray_menu(app, true);
             }
         }
     }
