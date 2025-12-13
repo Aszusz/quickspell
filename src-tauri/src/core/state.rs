@@ -1,60 +1,18 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Mutex;
 
-use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-use crate::events;
-use crate::spells::Spell;
-
-pub const STARTING_SPELL_ID: &str = "search_files";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Frame {
-    pub spell_id: String,
-    pub query: String,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum AppStatus {
-    Booting,
-    Loading,
-    Ready,
-    Error,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StateSnapshot {
-    pub status: AppStatus,
-    #[serde(rename = "noOfSpells")]
-    pub no_of_spells: usize,
-    pub spell_names: Vec<String>,
-    pub top_items: Vec<String>,
-    #[serde(rename = "totalItems")]
-    pub total_items: usize,
-}
-
-#[derive(Debug)]
-struct AppInner {
-    status: AppStatus,
-    spells: HashMap<String, Spell>,
-    stack: Vec<Frame>,
-    all_items: Vec<String>,
-}
-
-pub struct AppState {
-    inner: Mutex<AppInner>,
-}
+use crate::api::events;
+use crate::api::types::{
+    AppInner, AppState, AppStatus, Frame, Spell, StateSnapshot, STARTING_SPELL_ID,
+};
 
 impl AppState {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(AppInner {
+            inner: std::sync::Mutex::new(AppInner {
                 status: AppStatus::Booting,
                 spells: HashMap::new(),
                 stack: Vec::new(),

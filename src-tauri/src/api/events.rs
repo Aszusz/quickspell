@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter};
 
-use crate::state::StateSnapshot;
+use crate::api::types::StateSnapshot;
 
 pub const STATE_SNAPSHOT_EVENT: &str = "state-snapshot";
 

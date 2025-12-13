@@ -1,8 +1,5 @@
-mod bootstrap;
-mod commands;
-mod events;
-mod spells;
-mod state;
+mod api;
+mod core;
 
 use tauri::{
     menu::MenuBuilder, tray::TrayIconBuilder, ActivationPolicy, AppHandle, Manager, WindowEvent,
@@ -10,7 +7,7 @@ use tauri::{
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
 
-use state::AppState;
+use api::types::AppState;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_MENU_SHOW: &str = "tray-show";
@@ -51,14 +48,13 @@ pub fn run() {
             }
 
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // Keep the app running in the background when the window is closed.
                 let _ = window.hide();
                 api.prevent_close();
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::get_state_snapshot,
-            commands::start_app,
+            api::commands::get_state_snapshot,
+            api::commands::start_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
