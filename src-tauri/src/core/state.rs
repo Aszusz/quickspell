@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::env;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -140,14 +142,15 @@ impl AppState {
             false
         };
 
-        println!(
-            "[filter] query={:?} items={} results={} applied={} time={:?}",
-            query,
+        if let Err(err) = log_filter_metrics(
+            &query,
             item_count,
             result_count,
             applied,
-            start.elapsed()
-        );
+            start.elapsed(),
+        ) {
+            eprintln!("failed to write quickspell log: {err}");
+        }
 
         applied
     }
@@ -289,4 +292,47 @@ impl Default for AppState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn log_filter_metrics(
+    query: &str,
+    items: usize,
+    results: usize,
+    applied: bool,
+    elapsed: Duration,
+) -> std::io::Result<()> {
+    let log_path = resolve_log_path()?;
+    if let Some(parent) = log_path.parent() {
+        create_dir_all(parent)?;
+    }
+    let mut file = OpenOptions::new().create(true).append(true).open(log_path)?;
+
+    writeln!(
+        file,
+        "[filter] query={query:?} items={items} results={results} applied={applied} time={elapsed:?}"
+    )
+}
+
+fn resolve_log_path() -> std::io::Result<std::path::PathBuf> {
+    let base = if cfg!(target_os = "macos") {
+        env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .map(|p| p.join("Library").join("Application Support").join("QuickSpell"))
+    } else if cfg!(target_os = "windows") {
+        env::var_os("APPDATA")
+            .map(std::path::PathBuf::from)
+            .map(|p| p.join("QuickSpell"))
+    } else {
+        env::var_os("XDG_DATA_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| env::var_os("HOME").map(|p| std::path::PathBuf::from(p).join(".local/share")))
+            .map(|p| p.join("quickspell"))
+    };
+
+    base.map(|p| p.join("quickspell.log")).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "could not resolve log directory for quickspell",
+        )
+    })
 }
