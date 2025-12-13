@@ -6,6 +6,7 @@ export interface StateSnapshot {
   status: AppStatus;
   noOfSpells: number;
   spellNames: string[];
+  topItems: string[];
 }
 
 interface EventMap {

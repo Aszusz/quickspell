@@ -23,12 +23,21 @@ pub fn initialize(app: &tauri::App) {
         .then_some(dev_dir.clone())
         .or(resource_dir)
         .unwrap_or(dev_dir);
+    let resources_dir = spells_dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| spells_dir.clone());
 
     let result = crate::spells::load_spells_from_dir(&spells_dir)
         .map_err(|err| format!("failed to load spells: {err}"));
 
     match result {
-        Ok(spells) => state.set_ready_with_spells(spells),
+        Ok(spells) => {
+            if let Err(err) = state.set_ready_with_spells(spells, &resources_dir) {
+                eprintln!("{err}");
+                state.set_error();
+            }
+        }
         Err(err) => {
             eprintln!("{err}");
             state.set_error();

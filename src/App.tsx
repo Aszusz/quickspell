@@ -5,7 +5,12 @@ import { listenEvent } from "./events";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { useOsTheme } from "./hooks/use-os-theme";
 
-const DEFAULT_SNAPSHOT: StateSnapshot = { status: "booting", noOfSpells: 0, spellNames: [] };
+const DEFAULT_SNAPSHOT: StateSnapshot = {
+  status: "booting",
+  noOfSpells: 0,
+  spellNames: [],
+  topItems: [],
+};
 
 function App() {
   const [snapshot, setSnapshot] = useState<StateSnapshot>(DEFAULT_SNAPSHOT);
@@ -65,6 +70,20 @@ function App() {
             <div className="space-y-1">
               <div className="text-muted-foreground text-sm">Loaded spells</div>
               <div className="text-5xl font-bold tabular-nums">{snapshot.noOfSpells}</div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-muted-foreground text-sm">Top items</div>
+              {snapshot.topItems.length ? (
+                <ul className="bg-muted text-foreground divide-border divide-y overflow-hidden rounded-md">
+                  {snapshot.topItems.map((item, idx) => (
+                    <li key={`${item}-${idx}`} className="px-3 py-2 font-mono text-xs">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-muted-foreground text-sm">No items loaded</div>
+              )}
             </div>
             <div className="space-y-2">
               <div className="text-muted-foreground text-sm">Spell names</div>
