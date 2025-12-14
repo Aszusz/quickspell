@@ -14,6 +14,12 @@ use crate::api::types::{
 };
 use crate::core::template;
 
+pub enum EscapeResult {
+    ClearedQuery,
+    PoppedFrame,
+    Noop,
+}
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -21,6 +27,7 @@ impl AppState {
                 status: AppStatus::NotStarted,
                 spells: HashMap::new(),
                 stack: Vec::new(),
+                next_frame_id: 0,
             })),
         }
     }
@@ -35,26 +42,23 @@ impl AppState {
         inner.status = AppStatus::Booting;
         inner.spells = spells;
         inner.status = AppStatus::Loading;
-        inner.stack = vec![Frame {
-            spell_id: STARTING_SPELL_ID.to_string(),
-            query: String::new(),
-            all_items: Vec::new(),
-            filtered_items: Vec::new(),
-            is_filtering: false,
-            selected_idx: 0,
-        }];
+        inner.stack = vec![new_frame(&mut inner, STARTING_SPELL_ID.to_string())];
         Ok(())
     }
 
     pub fn finish_loading_with_items(&self, resources_dir: &Path) -> Result<(), String> {
-        let items = self.load_items_for_current_frame(resources_dir)?;
+        let Some((items, frame_uid)) = self.load_items_for_current_frame(resources_dir)? else {
+            return Ok(());
+        };
 
         if let Ok(mut inner) = self.inner.write() {
-            if let Some(frame) = inner.stack.last_mut() {
-                frame.all_items = items.clone();
-                frame.filtered_items = items;
+            if is_current_frame(&inner, frame_uid) {
+                if let Some(frame) = inner.stack.last_mut() {
+                    frame.all_items = items.clone();
+                    frame.filtered_items = items;
+                }
+                inner.status = AppStatus::Ready;
             }
-            inner.status = AppStatus::Ready;
             Ok(())
         } else {
             Err("state lock poisoned".to_string())
@@ -72,15 +76,6 @@ impl AppState {
     pub fn set_ready(&self) {
         if let Ok(mut inner) = self.inner.write() {
             inner.status = AppStatus::Ready;
-        }
-    }
-
-    pub fn append_items(&self, new_items: Vec<Item>) {
-        if let Ok(mut inner) = self.inner.write() {
-            if let Some(frame) = inner.stack.last_mut() {
-                frame.all_items.extend(new_items.clone());
-                frame.filtered_items.extend(new_items);
-            }
         }
     }
 
@@ -259,18 +254,45 @@ impl AppState {
         false
     }
 
-    fn load_items_for_current_frame(&self, resources_dir: &Path) -> Result<Vec<Item>, String> {
-        let (provider_cmd, frame_id) = {
+    pub fn handle_escape(&self) -> EscapeResult {
+        if let Ok(mut inner) = self.inner.write() {
+            if let Some(frame) = inner.stack.last_mut() {
+                if !frame.query.is_empty() {
+                    frame.query.clear();
+                    frame.selected_idx = 0;
+                    frame.filtered_items = frame.all_items.clone();
+                    frame.is_filtering = false;
+                    return EscapeResult::ClearedQuery;
+                }
+            }
+
+            if inner.stack.len() > 1 {
+                inner.stack.pop();
+                if let Some(frame) = inner.stack.last_mut() {
+                    clamp_selection(frame);
+                }
+                inner.status = AppStatus::Ready;
+                return EscapeResult::PoppedFrame;
+            }
+        }
+
+        EscapeResult::Noop
+    }
+
+    fn load_items_for_current_frame(
+        &self,
+        resources_dir: &Path,
+    ) -> Result<Option<(Vec<Item>, u64)>, String> {
+        let (provider_cmd, frame_id, frame_uid) = {
             let inner = self.inner.read().map_err(|_| "state lock poisoned")?;
-            let frame = inner
-                .stack
-                .last()
-                .ok_or_else(|| "no active frame on stack".to_string())?;
+            let Some(frame) = inner.stack.last() else {
+                return Ok(None);
+            };
             let spell = inner
                 .spells
                 .get(&frame.spell_id)
                 .ok_or_else(|| format!("spell not found for frame {}", frame.spell_id))?;
-            (spell.provider.clone(), frame.spell_id.clone())
+            (spell.provider.clone(), frame.spell_id.clone(), frame.id)
         };
 
         let output = Command::new("sh")
@@ -288,10 +310,13 @@ impl AppState {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(stdout
-            .lines()
-            .filter_map(|line| parse_item_line(line, &frame_id))
-            .collect())
+        Ok(Some((
+            stdout
+                .lines()
+                .filter_map(|line| parse_item_line(line, &frame_id))
+                .collect(),
+            frame_uid,
+        )))
     }
 
     pub fn stream_items_for_current_frame(
@@ -299,17 +324,16 @@ impl AppState {
         resources_dir: &Path,
         app: &AppHandle,
     ) -> Result<(), String> {
-        let (provider_cmd, frame_id) = {
+        let (provider_cmd, frame_id, frame_uid) = {
             let inner = self.inner.read().map_err(|_| "state lock poisoned")?;
-            let frame = inner
-                .stack
-                .last()
-                .ok_or_else(|| "no active frame on stack".to_string())?;
+            let Some(frame) = inner.stack.last() else {
+                return Ok(());
+            };
             let spell = inner
                 .spells
                 .get(&frame.spell_id)
                 .ok_or_else(|| format!("spell not found for frame {}", frame.spell_id))?;
-            (spell.provider.clone(), frame.spell_id.clone())
+            (spell.provider.clone(), frame.spell_id.clone(), frame.id)
         };
 
         let mut child = Command::new("sh")
@@ -332,18 +356,24 @@ impl AppState {
                 batch.push(item);
             }
             if last_emit.elapsed() >= throttle {
-                self.append_items(std::mem::take(&mut batch));
-                let _ = self.emit_snapshot(app);
+                if self.is_current_frame(frame_uid) {
+                    self.append_items_for_frame(frame_uid, std::mem::take(&mut batch));
+                    let _ = self.emit_snapshot(app);
+                } else {
+                    batch.clear();
+                }
                 last_emit = Instant::now();
             }
         }
 
-        if !batch.is_empty() {
-            self.append_items(batch);
+        if !batch.is_empty() && self.is_current_frame(frame_uid) {
+            self.append_items_for_frame(frame_uid, batch);
         }
 
-        self.set_ready();
-        let _ = self.emit_snapshot(app);
+        if self.is_current_frame(frame_uid) {
+            self.set_ready();
+            let _ = self.emit_snapshot(app);
+        }
         let _ = child.wait();
         Ok(())
     }
@@ -392,14 +422,8 @@ impl AppState {
                         if !inner.spells.contains_key(target_spell_id) {
                             return Err(format!("spell {target_spell_id} not found"));
                         }
-                        inner.stack.push(Frame {
-                            spell_id: target_spell_id.to_string(),
-                            query: String::new(),
-                            all_items: Vec::new(),
-                            filtered_items: Vec::new(),
-                            is_filtering: false,
-                            selected_idx: 0,
-                        });
+                        let frame = new_frame(&mut inner, target_spell_id.to_string());
+                        inner.stack.push(frame);
                         inner.status = AppStatus::Loading;
                     }
 
@@ -462,11 +486,56 @@ impl AppState {
 
         Err(format!("no matching action for label {label}"))
     }
+
+    fn is_current_frame(&self, frame_uid: u64) -> bool {
+        if let Ok(inner) = self.inner.read() {
+            is_current_frame(&inner, frame_uid)
+        } else {
+            false
+        }
+    }
+
+    fn append_items_for_frame(&self, frame_uid: u64, new_items: Vec<Item>) {
+        if let Ok(mut inner) = self.inner.write() {
+            append_items_for_frame(&mut inner, frame_uid, new_items);
+        }
+    }
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn is_current_frame(inner: &AppInner, frame_uid: u64) -> bool {
+    inner
+        .stack
+        .last()
+        .map(|frame| frame.id == frame_uid)
+        .unwrap_or(false)
+}
+
+fn append_items_for_frame(inner: &mut AppInner, frame_uid: u64, new_items: Vec<Item>) {
+    if let Some(frame) = inner.stack.last_mut() {
+        if frame.id == frame_uid {
+            frame.all_items.extend(new_items.clone());
+            frame.filtered_items.extend(new_items);
+        }
+    }
+}
+
+fn new_frame(inner: &mut AppInner, spell_id: String) -> Frame {
+    let id = inner.next_frame_id;
+    inner.next_frame_id = inner.next_frame_id.wrapping_add(1);
+    Frame {
+        id,
+        spell_id,
+        query: String::new(),
+        all_items: Vec::new(),
+        filtered_items: Vec::new(),
+        is_filtering: false,
+        selected_idx: 0,
     }
 }
 

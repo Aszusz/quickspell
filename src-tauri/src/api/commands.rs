@@ -3,6 +3,7 @@ use tauri::{AppHandle, State};
 use crate::api::events::emit_state_snapshot;
 use crate::api::types::{AppState, StateSnapshot};
 use crate::core::app;
+use crate::core::state::EscapeResult;
 
 #[tauri::command]
 pub fn get_state_snapshot(state: State<AppState>) -> StateSnapshot {
@@ -42,4 +43,14 @@ pub fn invoke_action(
 ) -> Result<(), String> {
     let resources_dir = app::resolve_resources_dir(&handle);
     state.invoke_action(&label, &resources_dir, &handle)
+}
+
+#[tauri::command]
+pub fn handle_escape(handle: AppHandle, state: State<'_, AppState>) {
+    match state.handle_escape() {
+        EscapeResult::ClearedQuery | EscapeResult::PoppedFrame => {
+            let _ = emit_state_snapshot(&handle, state.snapshot());
+        }
+        EscapeResult::Noop => {}
+    }
 }

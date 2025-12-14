@@ -121,6 +121,7 @@ mod tests {
             .collect();
 
         Frame {
+            id: 0,
             spell_id: spell_id.to_string(),
             query: query.to_string(),
             all_items: parsed_items.clone(),

@@ -84,6 +84,14 @@ function App() {
         return;
       }
 
+      if (e.key === "Escape") {
+        e.preventDefault();
+        invoke("handle_escape").catch((err) => {
+          console.error("failed to handle escape", err);
+        });
+        return;
+      }
+
       if (e.key === "Enter") {
         e.preventDefault();
         void invoke("invoke_action", { label: "MAIN" }).catch((err) => {

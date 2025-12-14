@@ -19,6 +19,7 @@ pub struct AppInner {
     pub status: AppStatus,
     pub spells: HashMap<String, Spell>,
     pub stack: Vec<Frame>,
+    pub next_frame_id: u64,
 }
 
 // StateSnapshot
@@ -58,6 +59,7 @@ pub enum AppStatus {
 
 #[derive(Debug, Clone)]
 pub struct Frame {
+    pub id: u64,
     pub spell_id: String,
     pub query: String,
     pub all_items: Vec<Item>,

@@ -67,6 +67,7 @@ pub fn run() {
             api::commands::set_query,
             api::commands::set_selection_delta,
             api::commands::invoke_action,
+            api::commands::handle_escape,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
