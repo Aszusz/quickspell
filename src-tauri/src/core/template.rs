@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use handlebars::Handlebars;
 use serde::Serialize;
 
-use crate::api::types::Frame;
+use crate::api::types::{Frame, Item};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TemplateError {
@@ -21,16 +21,35 @@ struct SelectionContext {
 }
 
 impl SelectionContext {
-    fn from_item(item: Option<&String>) -> Self {
-        let (raw, fields) = match item {
-            Some(value) => (value.clone(), split_fields(value)),
-            None => (String::new(), Vec::new()),
+    fn from_item(item: Option<&Item>) -> Self {
+        let (raw, kind, label, data, fields) = match item {
+            Some(value) => {
+                let fields = vec![
+                    value.item_type.clone(),
+                    value.name.clone(),
+                    value.data.clone(),
+                ];
+                (
+                    value.raw(),
+                    value.item_type.clone(),
+                    value.name.clone(),
+                    value.data.clone(),
+                    fields,
+                )
+            }
+            None => (
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                Vec::new(),
+            ),
         };
 
         Self {
-            kind: fields.first().cloned().unwrap_or_default(),
-            label: fields.get(1).cloned().unwrap_or_default(),
-            data: fields.get(2).cloned().unwrap_or_default(),
+            kind,
+            label,
+            data,
             fields,
             raw,
         }
@@ -81,7 +100,7 @@ fn build_context(frames: &[Frame]) -> HashMap<String, FrameContext> {
     ctx
 }
 
-fn selected_item(frame: &Frame) -> Option<&String> {
+fn selected_item(frame: &Frame) -> Option<&Item> {
     if frame.filtered_items.is_empty() {
         return None;
     }
@@ -91,20 +110,21 @@ fn selected_item(frame: &Frame) -> Option<&String> {
     frame.filtered_items.get(idx)
 }
 
-fn split_fields(value: &str) -> Vec<String> {
-    value.split('\t').map(|s| s.to_string()).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn frame(spell_id: &str, items: Vec<&str>, selected_idx: usize, query: &str) -> Frame {
+        let parsed_items: Vec<Item> = items
+            .into_iter()
+            .map(|s| Item::from_line(s).expect("failed to parse item"))
+            .collect();
+
         Frame {
             spell_id: spell_id.to_string(),
             query: query.to_string(),
-            all_items: items.iter().map(|s| s.to_string()).collect(),
-            filtered_items: items.iter().map(|s| s.to_string()).collect(),
+            all_items: parsed_items.clone(),
+            filtered_items: parsed_items,
             selected_idx,
         }
     }

@@ -2,15 +2,21 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type AppStatus = "notStarted" | "booting" | "loading" | "ready" | "error";
 
+export interface Item {
+  Type: string;
+  Name: string;
+  Data: string;
+}
+
 export interface StateSnapshot {
   status: AppStatus;
   noOfSpells: number;
   totalItems: number;
   spellNames: string[];
-  topItems: string[];
+  topItems: Item[];
   query: string;
   selectedIndex: number;
-  selectedItem: string | null;
+  selectedItem: Item | null;
 }
 
 interface EventMap {

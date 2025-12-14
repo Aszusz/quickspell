@@ -149,7 +149,7 @@ function App() {
               <ScrollArea className="border-border/80 bg-muted/40 h-full w-full rounded-lg border">
                 <ItemGroup>
                   {snapshot.topItems.map((item, idx) => (
-                    <React.Fragment key={`${item}-${idx}`}>
+                    <React.Fragment key={`${item.Type}-${item.Data}-${idx}`}>
                       <Item
                         size="sm"
                         variant="muted"
@@ -157,7 +157,7 @@ function App() {
                         data-selected={snapshot.selectedIndex === idx}
                         aria-selected={snapshot.selectedIndex === idx}
                       >
-                        <ItemTitle className="font-mono text-xs">{item}</ItemTitle>
+                        <ItemTitle className="font-mono text-xs">{item.Name}</ItemTitle>
                       </Item>
                       {idx < snapshot.topItems.length - 1 ? <ItemSeparator /> : null}
                     </React.Fragment>

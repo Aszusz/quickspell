@@ -10,7 +10,7 @@ use tauri::AppHandle;
 
 use crate::api::events;
 use crate::api::types::{
-    Action, AppInner, AppState, AppStatus, Frame, Spell, StateSnapshot, STARTING_SPELL_ID,
+    Action, AppInner, AppState, AppStatus, Frame, Item, Spell, StateSnapshot, STARTING_SPELL_ID,
 };
 use crate::core::template;
 
@@ -74,7 +74,7 @@ impl AppState {
         }
     }
 
-    pub fn append_items(&self, new_items: Vec<String>) {
+    pub fn append_items(&self, new_items: Vec<Item>) {
         if let Ok(mut inner) = self.inner.write() {
             if let Some(frame) = inner.stack.last_mut() {
                 frame.all_items.extend(new_items.clone());
@@ -118,7 +118,7 @@ impl AppState {
         };
 
         let item_count = all_items.len();
-        let filtered: Vec<String> = if query.is_empty() {
+        let filtered: Vec<Item> = if query.is_empty() {
             all_items
         } else if let Some(cfg) = config {
             crate::core::search::filter_items(&all_items, &query, &cfg)
@@ -246,7 +246,7 @@ impl AppState {
         false
     }
 
-    fn load_items_for_current_frame(&self, resources_dir: &Path) -> Result<Vec<String>, String> {
+    fn load_items_for_current_frame(&self, resources_dir: &Path) -> Result<Vec<Item>, String> {
         let (provider_cmd, frame_id) = {
             let inner = self.inner.read().map_err(|_| "state lock poisoned")?;
             let frame = inner
@@ -275,7 +275,10 @@ impl AppState {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(stdout.lines().map(|line| line.to_string()).collect())
+        Ok(stdout
+            .lines()
+            .filter_map(|line| parse_item_line(line, &frame_id))
+            .collect())
     }
 
     pub fn stream_items_for_current_frame(
@@ -307,12 +310,14 @@ impl AppState {
         let stdout = child.stdout.take().ok_or("no stdout handle")?;
         let reader = BufReader::new(stdout);
 
-        let mut batch = Vec::new();
+        let mut batch: Vec<Item> = Vec::new();
         let mut last_emit = Instant::now();
         let throttle = Duration::from_millis(500);
 
         for line in reader.lines().map_while(Result::ok) {
-            batch.push(line);
+            if let Some(item) = parse_item_line(&line, &frame_id) {
+                batch.push(item);
+            }
             if last_emit.elapsed() >= throttle {
                 self.append_items(std::mem::take(&mut batch));
                 let _ = self.emit_snapshot(app);
@@ -387,6 +392,20 @@ impl AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn parse_item_line(line: &str, frame_id: &str) -> Option<Item> {
+    if line.trim().is_empty() {
+        return None;
+    }
+
+    match Item::from_line(line) {
+        Some(item) => Some(item),
+        None => {
+            eprintln!("skipping malformed item for frame {frame_id}: {line}");
+            None
+        }
     }
 }
 

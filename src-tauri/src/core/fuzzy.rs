@@ -6,6 +6,8 @@ use nucleo_matcher::{Config, Matcher, Utf32Str};
 use rayon::prelude::*;
 use unicode_normalization::UnicodeNormalization;
 
+use crate::api::types::Item;
+
 #[derive(Debug, Clone, Copy)]
 pub enum Scheme {
     Default,
@@ -161,7 +163,7 @@ fn basename_substring_start(
         .map(|pos| start + pos)
 }
 
-pub fn filter_items<'a>(items: &'a [String], query: &str, options: &Options) -> Vec<&'a String> {
+pub fn filter_items<'a>(items: &'a [Item], query: &str, options: &Options) -> Vec<&'a Item> {
     if query.is_empty() {
         return items.iter().collect();
     }
@@ -190,7 +192,7 @@ pub fn filter_items<'a>(items: &'a [String], query: &str, options: &Options) -> 
         .par_iter()
         .enumerate()
         .filter_map(|(idx, item)| {
-            let haystack = item.split('\t').nth(field_idx).unwrap_or(item);
+            let haystack = item.field(field_idx);
             let haystack_norm = normalize_nfd(haystack);
             let matcher_tls = if use_path {
                 &MATCHER_PATH
@@ -269,10 +271,10 @@ mod tests {
     #[test]
     fn path_scheme_prefers_basename_exact_match() {
         let items = vec![
-            "FILE\tRepositoryPathFieldProperty.nib\t/tmp/demo/RepositoryPathFieldProperty.nib".to_string(),
-            "FILE\tRepositoryBrowserViewController.nib\t/tmp/demo/RepositoryBrowserViewController.nib".to_string(),
-            "FILE\trepository-request.graphql\t/tmp/demo/nested/repository-request.graphql".to_string(),
-            "DIR\trepos\t/tmp/demo/repos/".to_string(),
+            Item::from_line("FILE\tRepositoryPathFieldProperty.nib\t/tmp/demo/RepositoryPathFieldProperty.nib").unwrap(),
+            Item::from_line("FILE\tRepositoryBrowserViewController.nib\t/tmp/demo/RepositoryBrowserViewController.nib").unwrap(),
+            Item::from_line("FILE\trepository-request.graphql\t/tmp/demo/nested/repository-request.graphql").unwrap(),
+            Item::from_line("DIR\trepos\t/tmp/demo/repos/").unwrap(),
         ];
 
         let options = Options {
@@ -283,14 +285,15 @@ mod tests {
 
         let results = filter_items(&items, "repos", &options);
         assert_eq!(
-            results.first().map(|s| s.as_str()),
-            Some("DIR\trepos\t/tmp/demo/repos/")
+            results.first().map(|item| item.raw()),
+            Some("DIR\trepos\t/tmp/demo/repos/".to_string())
         );
     }
 
     #[test]
     fn matches_unicode_query_in_path() {
-        let items = vec!["FILE\tksięgowość\t/home/user/księgowość/report.txt".to_string()];
+        let items =
+            vec![Item::from_line("FILE\tksięgowość\t/home/user/księgowość/report.txt").unwrap()];
         let options = Options {
             field: 3,
             scheme: Scheme::Path,
@@ -304,7 +307,9 @@ mod tests {
     #[test]
     fn matches_unicode_nfd_path() {
         let nfd = "ksi\u{0065}\u{0328}gowo\u{015b}\u{0063}\u{0301}";
-        let items = vec![format!("FILE\t{}\t/home/user/{}/report.txt", nfd, nfd)];
+        let items = vec![
+            Item::from_line(&format!("FILE\t{}\t/home/user/{}/report.txt", nfd, nfd)).unwrap(),
+        ];
         let options = Options {
             field: 3,
             scheme: Scheme::Path,
@@ -321,9 +326,9 @@ mod tests {
         let file1 = "/home/user/księgowość/report.txt";
         let file2 = "/home/user/księgowość/notes.txt";
         let items = vec![
-            format!("DIR\tksięgowość\t{dir}"),
-            format!("FILE\treport\t{file1}"),
-            format!("FILE\tnotes\t{file2}"),
+            Item::from_line(&format!("DIR\tksięgowość\t{dir}")).unwrap(),
+            Item::from_line(&format!("FILE\treport\t{file1}")).unwrap(),
+            Item::from_line(&format!("FILE\tnotes\t{file2}")).unwrap(),
         ];
         let options = Options {
             field: 3,
@@ -332,7 +337,7 @@ mod tests {
         };
 
         let results = filter_items(&items, "księ", &options);
-        let first = results.first().map(|s| s.as_str()).unwrap_or("");
+        let first = results.first().map(|item| item.data.as_str()).unwrap_or("");
         assert!(first.contains(dir));
     }
 
@@ -342,9 +347,9 @@ mod tests {
         let file1 = "/tmp/demo/księgowość/report.txt";
         let file2 = "/tmp/demo/księgowość/reports/2024/q1.pdf";
         let items = vec![
-            format!("DIR\tksięgowość\t{dir}"),
-            format!("FILE\treport\t{file1}"),
-            format!("FILE\tq1\t{file2}"),
+            Item::from_line(&format!("DIR\tksięgowość\t{dir}")).unwrap(),
+            Item::from_line(&format!("FILE\treport\t{file1}")).unwrap(),
+            Item::from_line(&format!("FILE\tq1\t{file2}")).unwrap(),
         ];
         let options = Options {
             field: 3,
@@ -355,8 +360,8 @@ mod tests {
         let results = filter_items(&items, "księ", &options);
         let ordered: Vec<_> = results.into_iter().cloned().collect();
         assert_eq!(
-            ordered.first().map(|s| s.as_str()),
-            Some(format!("DIR\tksięgowość\t{dir}").as_str())
+            ordered.first().map(|item| item.raw()),
+            Some(format!("DIR\tksięgowość\t{dir}"))
         );
     }
 }

@@ -30,12 +30,12 @@ pub struct StateSnapshot {
     #[serde(rename = "noOfSpells")]
     pub no_of_spells: usize,
     pub spell_names: Vec<String>,
-    pub top_items: Vec<String>,
+    pub top_items: Vec<Item>,
     pub query: String,
     #[serde(rename = "selectedIndex")]
     pub selected_index: usize,
     #[serde(rename = "selectedItem")]
-    pub selected_item: Option<String>,
+    pub selected_item: Option<Item>,
     #[serde(rename = "totalItems")]
     pub total_items: usize,
 }
@@ -58,8 +58,8 @@ pub enum AppStatus {
 pub struct Frame {
     pub spell_id: String,
     pub query: String,
-    pub all_items: Vec<String>,
-    pub filtered_items: Vec<String>,
+    pub all_items: Vec<Item>,
+    pub filtered_items: Vec<Item>,
     pub selected_idx: usize,
 }
 
@@ -146,6 +146,46 @@ pub struct Spell {
     pub search: Option<SearchConfig>,
     #[serde(default)]
     pub actions: Vec<Action>,
+}
+
+// Item
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Item {
+    #[serde(rename = "Type")]
+    pub item_type: String,
+    #[serde(rename = "Name")]
+    pub name: String,
+    #[serde(rename = "Data")]
+    pub data: String,
+}
+
+impl Item {
+    pub fn from_line(line: &str) -> Option<Self> {
+        let mut fields = line.split('\t');
+        let item_type = fields.next()?;
+        let name = fields.next()?;
+        let data = fields.next()?;
+
+        Some(Self {
+            item_type: item_type.to_string(),
+            name: name.to_string(),
+            data: data.to_string(),
+        })
+    }
+
+    pub fn field(&self, idx: usize) -> &str {
+        match idx {
+            0 => &self.item_type,
+            1 => &self.name,
+            2 => &self.data,
+            _ => &self.name,
+        }
+    }
+
+    pub fn raw(&self) -> String {
+        format!("{}\t{}\t{}", self.item_type, self.name, self.data)
+    }
 }
 
 // SpellLoadError
