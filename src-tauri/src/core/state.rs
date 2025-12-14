@@ -40,6 +40,7 @@ impl AppState {
             query: String::new(),
             all_items: Vec::new(),
             filtered_items: Vec::new(),
+            is_filtering: false,
             selected_idx: 0,
         }];
         Ok(())
@@ -94,6 +95,7 @@ impl AppState {
             if let Some(frame) = inner.stack.last_mut() {
                 frame.query = query;
                 frame.selected_idx = 0;
+                frame.is_filtering = true;
             }
         }
     }
@@ -140,6 +142,7 @@ impl AppState {
                 Some(frame) if frame.query == query => {
                     frame.filtered_items = filtered;
                     clamp_selection(frame);
+                    frame.is_filtering = false;
                     true
                 }
                 _ => false,
@@ -165,10 +168,11 @@ impl AppState {
             top_items,
             total_items,
             query,
+            is_filtering,
             selected_idx,
             selected_item,
         ) = if let Ok(inner) = self.inner.read() {
-            let (top, total, query, selected_idx, selected_item) = inner
+            let (top, total, query, is_filtering, selected_idx, selected_item) = inner
                 .stack
                 .last()
                 .map(|f| {
@@ -178,11 +182,12 @@ impl AppState {
                         f.filtered_items.iter().take(100).cloned().collect(),
                         f.filtered_items.len(),
                         f.query.clone(),
+                        f.is_filtering,
                         clamped_idx,
                         selected,
                     )
                 })
-                .unwrap_or((Vec::new(), 0, String::new(), 0, None));
+                .unwrap_or((Vec::new(), 0, String::new(), false, 0, None));
 
             (
                 inner.status,
@@ -201,6 +206,7 @@ impl AppState {
                 top,
                 total,
                 query,
+                is_filtering,
                 selected_idx,
                 selected_item,
             )
@@ -212,6 +218,7 @@ impl AppState {
                 Vec::new(),
                 0,
                 String::new(),
+                false,
                 0,
                 None,
             )
@@ -224,6 +231,7 @@ impl AppState {
             top_items,
             total_items,
             query,
+            is_filtering,
             selected_index: selected_idx,
             selected_item,
         }
@@ -389,6 +397,7 @@ impl AppState {
                             query: String::new(),
                             all_items: Vec::new(),
                             filtered_items: Vec::new(),
+                            is_filtering: false,
                             selected_idx: 0,
                         });
                         inner.status = AppStatus::Loading;

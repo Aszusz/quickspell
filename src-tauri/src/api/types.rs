@@ -32,6 +32,8 @@ pub struct StateSnapshot {
     pub spell_names: Vec<String>,
     pub top_items: Vec<Item>,
     pub query: String,
+    #[serde(rename = "isFiltering")]
+    pub is_filtering: bool,
     #[serde(rename = "selectedIndex")]
     pub selected_index: usize,
     #[serde(rename = "selectedItem")]
@@ -60,6 +62,7 @@ pub struct Frame {
     pub query: String,
     pub all_items: Vec<Item>,
     pub filtered_items: Vec<Item>,
+    pub is_filtering: bool,
     pub selected_idx: usize,
 }
 

@@ -17,6 +17,7 @@ pub async fn start_app(handle: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn set_query(query: String, handle: AppHandle, state: State<'_, AppState>) {
     state.set_query(query);
+    let _ = emit_state_snapshot(&handle, state.snapshot());
     let state = state.inner().clone();
     tauri::async_runtime::spawn(async move {
         if state.filter_items() {

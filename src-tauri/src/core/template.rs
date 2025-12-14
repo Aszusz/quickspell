@@ -125,6 +125,7 @@ mod tests {
             query: query.to_string(),
             all_items: parsed_items.clone(),
             filtered_items: parsed_items,
+            is_filtering: false,
             selected_idx,
         }
     }

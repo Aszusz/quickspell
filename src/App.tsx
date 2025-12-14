@@ -16,6 +16,7 @@ import { Item, ItemGroup, ItemTitle } from "./components/ui/item";
 import { Kbd, KbdGroup } from "./components/ui/kbd";
 import { usePaginationLayout } from "./hooks/use-pagination-layout";
 import { cn } from "./lib/utils";
+import { Spinner } from "./components/ui/spinner";
 
 const DEFAULT_SNAPSHOT: StateSnapshot = {
   status: "loading",
@@ -24,6 +25,7 @@ const DEFAULT_SNAPSHOT: StateSnapshot = {
   spellNames: [],
   topItems: [],
   query: "",
+  isFiltering: false,
   selectedIndex: 0,
   selectedItem: null,
 };
@@ -106,6 +108,8 @@ function App() {
   const pageCount = totalItems ? Math.ceil(totalItems / effectivePageSize) : 0;
   const pageStart = currentPage * effectivePageSize;
   const pageItems = totalItems ? items.slice(pageStart, pageStart + effectivePageSize) : [];
+  const showSpinner =
+    snapshot.status === "booting" || snapshot.status === "loading" || snapshot.isFiltering;
 
   return (
     <main className="bg-background text-foreground flex h-screen w-full flex-col overflow-hidden p-3 sm:p-4">
@@ -138,7 +142,11 @@ function App() {
 
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="relative w-full">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            {showSpinner ? (
+              <Spinner className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2" />
+            ) : (
+              <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            )}
             <Input
               ref={searchRef}
               className="w-full pr-14 pl-10"

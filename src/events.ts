@@ -15,6 +15,7 @@ export interface StateSnapshot {
   spellNames: string[];
   topItems: Item[];
   query: string;
+  isFiltering: boolean;
   selectedIndex: number;
   selectedItem: Item | null;
 }
