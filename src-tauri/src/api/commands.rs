@@ -40,5 +40,5 @@ pub fn invoke_action(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let resources_dir = app::resolve_resources_dir(&handle);
-    state.invoke_action(&label, &resources_dir)
+    state.invoke_action(&label, &resources_dir, &handle)
 }

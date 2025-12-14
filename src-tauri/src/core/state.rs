@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use tauri::AppHandle;
+use tauri::{async_runtime, AppHandle};
 
 use crate::api::events;
 use crate::api::types::{
@@ -340,7 +340,12 @@ impl AppState {
         Ok(())
     }
 
-    pub fn invoke_action(&self, label: &str, resources_dir: &Path) -> Result<(), String> {
+    pub fn invoke_action(
+        &self,
+        label: &str,
+        resources_dir: &Path,
+        app: &AppHandle,
+    ) -> Result<(), String> {
         let (frames, actions) = {
             let inner = self.inner.read().map_err(|_| "state lock poisoned")?;
             let frames = inner.stack.clone();
@@ -363,7 +368,63 @@ impl AppState {
             }
 
             match action {
-                Action::Spell { .. } => return Ok(()),
+                Action::Spell { spell, .. } => {
+                    let rendered_spell =
+                        template::resolve_template(&spell, &frames).map_err(|e| match e {
+                            template::TemplateError::Render(err) => err,
+                        })?;
+
+                    let target_spell_id = rendered_spell.trim();
+                    if target_spell_id.is_empty() {
+                        return Err("resolved spell id is empty".to_string());
+                    }
+
+                    {
+                        let mut inner = self.inner.write().map_err(|_| "state lock poisoned")?;
+                        if !inner.spells.contains_key(target_spell_id) {
+                            return Err(format!("spell {target_spell_id} not found"));
+                        }
+                        inner.stack.push(Frame {
+                            spell_id: target_spell_id.to_string(),
+                            query: String::new(),
+                            all_items: Vec::new(),
+                            filtered_items: Vec::new(),
+                            selected_idx: 0,
+                        });
+                        inner.status = AppStatus::Loading;
+                    }
+
+                    let _ = self.emit_snapshot(app);
+
+                    let state = self.clone();
+                    let resources_dir = resources_dir.to_path_buf();
+                    let app_handle = app.clone();
+                    async_runtime::spawn_blocking(move || {
+                        let is_streaming = state
+                            .get_current_spell()
+                            .and_then(|s| s.is_streaming)
+                            .unwrap_or(false);
+
+                        let result = if is_streaming {
+                            state.stream_items_for_current_frame(&resources_dir, &app_handle)
+                        } else {
+                            state.finish_loading_with_items(&resources_dir)
+                        };
+
+                        match result {
+                            Ok(()) => {
+                                let _ = state.emit_snapshot(&app_handle);
+                            }
+                            Err(err) => {
+                                state.set_error();
+                                let _ = state.emit_snapshot(&app_handle);
+                                eprintln!("failed to load items: {err}");
+                            }
+                        }
+                    });
+
+                    return Ok(());
+                }
                 Action::Cmd { cmd, .. } => {
                     let rendered_cmd =
                         template::resolve_template(&cmd, &frames).map_err(|e| match e {
