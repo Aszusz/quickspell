@@ -12,9 +12,10 @@ import {
 } from "./components/ui/breadcrumb";
 import { Input } from "./components/ui/input";
 import { Search } from "lucide-react";
-import { ScrollArea } from "./components/ui/scroll-area";
-import { Item, ItemGroup, ItemSeparator, ItemTitle } from "./components/ui/item";
+import { Item, ItemGroup, ItemTitle } from "./components/ui/item";
 import { Kbd, KbdGroup } from "./components/ui/kbd";
+import { usePaginationLayout } from "./hooks/use-pagination-layout";
+import { cn } from "./lib/utils";
 
 const DEFAULT_SNAPSHOT: StateSnapshot = {
   status: "loading",
@@ -32,6 +33,10 @@ function App() {
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   useOsTheme();
+  const { containerRef, measureItemRef, pageSize } = usePaginationLayout({
+    estimatedItemHeight: 44,
+    gap: 8,
+  });
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -94,6 +99,14 @@ function App() {
     requestAnimationFrame(() => searchRef.current?.focus());
   };
 
+  const items = snapshot.topItems;
+  const totalItems = items.length;
+  const effectivePageSize = Math.max(1, pageSize);
+  const currentPage = totalItems ? Math.floor(snapshot.selectedIndex / effectivePageSize) : 0;
+  const pageCount = totalItems ? Math.ceil(totalItems / effectivePageSize) : 0;
+  const pageStart = currentPage * effectivePageSize;
+  const pageItems = totalItems ? items.slice(pageStart, pageStart + effectivePageSize) : [];
+
   return (
     <main className="bg-background text-foreground flex h-screen w-full flex-col overflow-hidden p-3 sm:p-4">
       <div className="flex min-h-0 flex-1 flex-col gap-6">
@@ -145,28 +158,52 @@ function App() {
           </div>
 
           <section className="flex min-h-0 flex-1 flex-col">
-            {snapshot.topItems.length ? (
-              <ScrollArea className="border-border/80 bg-muted/40 h-full w-full rounded-lg border">
-                <ItemGroup>
-                  {snapshot.topItems.map((item, idx) => (
-                    <React.Fragment key={`${item.Type}-${item.Data}-${idx}`}>
+            {pageItems.length ? (
+              <div
+                ref={containerRef}
+                className="bg-muted/40 min-h-0 w-full flex-1 overflow-hidden rounded-none"
+              >
+                <ItemGroup className="gap-2">
+                  {pageItems.map((item, idx) => {
+                    const absoluteIdx = pageStart + idx;
+                    return (
                       <Item
+                        key={`${item.Type}-${item.Data}-${absoluteIdx}`}
+                        ref={idx === 0 ? measureItemRef : undefined}
                         size="sm"
                         variant="muted"
-                        className="data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary/50 rounded-none border-0 px-3 py-2"
-                        data-selected={snapshot.selectedIndex === idx}
-                        aria-selected={snapshot.selectedIndex === idx}
+                        className="data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary/50 border-border/80 border px-3 py-2"
+                        data-selected={snapshot.selectedIndex === absoluteIdx}
+                        aria-selected={snapshot.selectedIndex === absoluteIdx}
                       >
                         <ItemTitle className="font-mono text-xs">{item.Name}</ItemTitle>
                       </Item>
-                      {idx < snapshot.topItems.length - 1 ? <ItemSeparator /> : null}
-                    </React.Fragment>
-                  ))}
+                    );
+                  })}
                 </ItemGroup>
-              </ScrollArea>
+              </div>
             ) : (
               <div className="text-muted-foreground text-sm">No items loaded</div>
             )}
+            {pageCount > 1 ? (
+              <div className="flex items-center gap-2 pt-2">
+                <nav aria-label="Pagination" className="flex items-center gap-2">
+                  {Array.from({ length: pageCount }).map((_, idx) => (
+                    <span
+                      key={idx}
+                      aria-current={idx === currentPage ? "page" : undefined}
+                      className={cn(
+                        "border-border/80 h-2.5 w-2.5 rounded-full border transition-colors",
+                        idx === currentPage ? "bg-foreground" : "bg-muted"
+                      )}
+                    />
+                  ))}
+                </nav>
+                <span className="text-muted-foreground text-xs">
+                  Page {currentPage + 1} of {pageCount}
+                </span>
+              </div>
+            ) : null}
           </section>
         </div>
 

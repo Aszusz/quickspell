@@ -118,7 +118,7 @@ impl AppState {
         };
 
         let item_count = all_items.len();
-        let filtered: Vec<Item> = if query.is_empty() {
+        let mut filtered: Vec<Item> = if query.is_empty() {
             all_items
         } else if let Some(cfg) = config {
             crate::core::search::filter_items(&all_items, &query, &cfg)
@@ -128,6 +128,11 @@ impl AppState {
         } else {
             all_items
         };
+
+        if filtered.len() > 100 {
+            filtered.truncate(100);
+        }
+
         let result_count = filtered.len();
 
         let applied = if let Ok(mut inner) = self.inner.write() {
@@ -170,7 +175,7 @@ impl AppState {
                     let clamped_idx = f.selected_idx.min(f.filtered_items.len().saturating_sub(1));
                     let selected = f.filtered_items.get(clamped_idx).cloned();
                     (
-                        f.filtered_items.iter().take(20).cloned().collect(),
+                        f.filtered_items.iter().take(100).cloned().collect(),
                         f.filtered_items.len(),
                         f.query.clone(),
                         clamped_idx,
