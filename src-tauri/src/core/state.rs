@@ -468,9 +468,15 @@ impl AppState {
                         return Err("resolved command is empty".to_string());
                     }
 
-                    let status = std::process::Command::new("sh")
-                        .arg("-c")
-                        .arg(&rendered_cmd)
+                    let argv = shell_words::split(&rendered_cmd)
+                        .map_err(|err| format!("failed to parse action command: {err}"))?;
+
+                    let (program, args) = argv
+                        .split_first()
+                        .ok_or_else(|| "resolved command is empty".to_string())?;
+
+                    let status = std::process::Command::new(program)
+                        .args(args)
                         .current_dir(resources_dir)
                         .status()
                         .map_err(|err| format!("failed to run action command: {err}"))?;
