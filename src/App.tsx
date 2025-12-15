@@ -98,10 +98,7 @@ function App() {
     };
   }, []);
 
-  const spellNames = useMemo(
-    () => [...snapshot.spellNames].sort((a, b) => a.localeCompare(b)),
-    [snapshot.spellNames]
-  );
+  const spellNames = useMemo(() => snapshot.spellNames, [snapshot.spellNames]);
 
   const filteredActions = useMemo(() => {
     const query = actionQuery.trim().toLowerCase();
@@ -115,6 +112,17 @@ function App() {
       return Math.min(idx, filteredActions.length - 1);
     });
   }, [filteredActions]);
+
+  const invokeOptionalAction = useCallback(
+    (action?: (typeof filteredActions)[number]) => {
+      if (!action) return;
+      closeActionsDialog();
+      void invoke("invoke_action", { label: action.label }).catch((err) => {
+        console.error("failed to invoke optional action", err);
+      });
+    },
+    [closeActionsDialog, filteredActions]
+  );
 
   useEffect(() => {
     if (isActionsOpen) {
@@ -132,6 +140,10 @@ function App() {
         if (e.key === "Escape") {
           e.preventDefault();
           closeActionsDialog();
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          invokeOptionalAction(filteredActions[actionIndex]);
         }
         if (e.key === "ArrowDown" || e.key === "ArrowUp") {
           e.preventDefault();
@@ -176,7 +188,14 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeActionsDialog, filteredActions.length, isActionsOpen, openActionsDialog]);
+  }, [
+    actionIndex,
+    closeActionsDialog,
+    filteredActions,
+    isActionsOpen,
+    invokeOptionalAction,
+    openActionsDialog,
+  ]);
 
   const handleSearchBlur = () => {
     // Keep focus on the search box even after clicking outside, unless the actions dialog is open.
