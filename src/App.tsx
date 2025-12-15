@@ -26,7 +26,6 @@ const DEFAULT_SNAPSHOT: StateSnapshot = {
   topItems: [],
   query: "",
   isFiltering: false,
-  selectedIndex: 0,
   selectedItem: null,
 };
 
@@ -42,6 +41,10 @@ function App() {
     gap: 8,
   });
 
+  const selectedItem = snapshot.selectedItem?.details ?? null;
+  const selectedActions = snapshot.selectedItem?.actions ?? [];
+  const selectedIndex = snapshot.selectedItem?.index ?? 0;
+
   const closeActionsDialog = useCallback(() => {
     setIsActionsOpen(false);
     setDialogItem(null);
@@ -50,12 +53,12 @@ function App() {
 
   const openActionsDialog = useCallback(
     (item?: SpellItem | null) => {
-      const target = item ?? snapshot.selectedItem;
+      const target = item ?? selectedItem;
       if (!target) return;
       setDialogItem(target);
       setIsActionsOpen(true);
     },
-    [snapshot.selectedItem]
+    [selectedItem]
   );
 
   useEffect(() => {
@@ -144,7 +147,7 @@ function App() {
   const items = snapshot.topItems;
   const totalItems = items.length;
   const effectivePageSize = Math.max(1, pageSize);
-  const currentPage = totalItems ? Math.floor(snapshot.selectedIndex / effectivePageSize) : 0;
+  const currentPage = totalItems ? Math.floor(selectedIndex / effectivePageSize) : 0;
   const pageCount = totalItems ? Math.ceil(totalItems / effectivePageSize) : 0;
   const pageStart = currentPage * effectivePageSize;
   const pageItems = totalItems ? items.slice(pageStart, pageStart + effectivePageSize) : [];
@@ -221,8 +224,8 @@ function App() {
                         size="sm"
                         variant="muted"
                         className="data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary/50 border-border/80 border px-3 py-2"
-                        data-selected={snapshot.selectedIndex === absoluteIdx}
-                        aria-selected={snapshot.selectedIndex === absoluteIdx}
+                        data-selected={selectedIndex === absoluteIdx}
+                        aria-selected={selectedIndex === absoluteIdx}
                       >
                         <ItemTitle className="font-mono text-xs">{item.Name}</ItemTitle>
                       </Item>
@@ -294,8 +297,24 @@ function App() {
                   <span className="text-foreground font-mono text-sm">{dialogItem.Name}</span>
                 </div>
               </header>
-              <div className="text-muted-foreground px-4 pb-4 text-sm">
-                <p>Hook your optional actions here. Press Escape to close.</p>
+              <div className="text-muted-foreground space-y-2 px-4 pb-4 text-sm">
+                {selectedActions.length ? (
+                  <ul className="space-y-1">
+                    {selectedActions.map((action) => (
+                      <li
+                        key={`${action.label}-${action.type}`}
+                        className="text-foreground border-border/80 flex items-center justify-between rounded border px-2 py-1 text-xs"
+                      >
+                        <span className="font-medium">{action.label}</span>
+                        <span className="text-muted-foreground tracking-wide uppercase">
+                          {action.type}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No available actions. Press Escape to close.</p>
+                )}
               </div>
             </div>
           </div>

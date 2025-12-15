@@ -10,7 +10,8 @@ use tauri::{async_runtime, AppHandle};
 
 use crate::api::events;
 use crate::api::types::{
-    Action, AppInner, AppState, AppStatus, Frame, Item, Spell, StateSnapshot, STARTING_SPELL_ID,
+    Action, ActionType, AppInner, AppState, AppStatus, AvailableAction, Frame, Item, SelectedItem,
+    Spell, StateSnapshot, STARTING_SPELL_ID,
 };
 use crate::core::template;
 
@@ -166,8 +167,7 @@ impl AppState {
             total_items,
             query,
             is_filtering,
-            selected_idx,
-            selected_item,
+            selected,
         ) = if let Ok(inner) = self.inner.read() {
             let (top, total, query, is_filtering, selected_idx, selected_item) = inner
                 .stack
@@ -196,6 +196,12 @@ impl AppState {
                 })
                 .unwrap_or((Vec::new(), 0, String::new(), false, 0, None));
 
+            let selected = selected_item.map(|details| SelectedItem {
+                index: selected_idx,
+                details,
+                actions: matching_actions(&inner),
+            });
+
             (
                 inner.status,
                 inner.spells.len(),
@@ -214,8 +220,7 @@ impl AppState {
                 total,
                 query,
                 is_filtering,
-                selected_idx,
-                selected_item,
+                selected,
             )
         } else {
             (
@@ -226,7 +231,6 @@ impl AppState {
                 0,
                 String::new(),
                 false,
-                0,
                 None,
             )
         };
@@ -239,8 +243,7 @@ impl AppState {
             total_items,
             query,
             is_filtering,
-            selected_index: selected_idx,
-            selected_item,
+            selected_item: selected,
         }
     }
 
@@ -542,6 +545,34 @@ fn append_items_for_frame(inner: &mut AppInner, frame_uid: u64, new_items: Vec<I
     }
 }
 
+fn matching_actions(inner: &AppInner) -> Vec<AvailableAction> {
+    let frames = &inner.stack;
+    let Some(frame) = frames.last() else {
+        return Vec::new();
+    };
+    let Some(spell) = inner.spells.get(&frame.spell_id) else {
+        return Vec::new();
+    };
+
+    spell
+        .actions
+        .iter()
+        .filter_map(
+            |action| match condition_passes(action_condition(action), frames) {
+                Ok(true) => Some(AvailableAction {
+                    label: action_name(action).unwrap_or("MAIN").to_string(),
+                    action_type: ActionType::from(action),
+                }),
+                Ok(false) => None,
+                Err(err) => {
+                    eprintln!("failed to evaluate action condition: {err}");
+                    None
+                }
+            },
+        )
+        .collect()
+}
+
 fn new_frame(inner: &mut AppInner, spell_id: String) -> Frame {
     let id = inner.next_frame_id;
     inner.next_frame_id = inner.next_frame_id.wrapping_add(1);
@@ -631,6 +662,15 @@ fn clamp_selection(frame: &mut Frame) {
         frame.selected_idx = frame.selected_idx.min(max_idx);
     } else {
         frame.selected_idx = 0;
+    }
+}
+
+impl From<&Action> for ActionType {
+    fn from(action: &Action) -> Self {
+        match action {
+            Action::Cmd { .. } => ActionType::Cmd,
+            Action::Spell { .. } => ActionType::Spell,
+        }
     }
 }
 

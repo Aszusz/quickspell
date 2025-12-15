@@ -8,6 +8,19 @@ export interface Item {
   Data: string;
 }
 
+export type ActionType = "CMD" | "SPELL";
+
+export interface AvailableAction {
+  label: string;
+  type: ActionType;
+}
+
+export interface SelectedItem {
+  index: number;
+  details: Item;
+  actions: AvailableAction[];
+}
+
 export interface StateSnapshot {
   status: AppStatus;
   noOfSpells: number;
@@ -16,8 +29,7 @@ export interface StateSnapshot {
   topItems: Item[];
   query: string;
   isFiltering: boolean;
-  selectedIndex: number;
-  selectedItem: Item | null;
+  selectedItem: SelectedItem | null;
 }
 
 interface EventMap {

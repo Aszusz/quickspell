@@ -35,12 +35,33 @@ pub struct StateSnapshot {
     pub query: String,
     #[serde(rename = "isFiltering")]
     pub is_filtering: bool,
-    #[serde(rename = "selectedIndex")]
-    pub selected_index: usize,
     #[serde(rename = "selectedItem")]
-    pub selected_item: Option<Item>,
+    pub selected_item: Option<SelectedItem>,
     #[serde(rename = "totalItems")]
     pub total_items: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectedItem {
+    pub index: usize,
+    pub details: Item,
+    pub actions: Vec<AvailableAction>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ActionType {
+    Cmd,
+    Spell,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableAction {
+    pub label: String,
+    #[serde(rename = "type")]
+    pub action_type: ActionType,
 }
 
 // AppStatus
