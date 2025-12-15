@@ -286,7 +286,12 @@ function App() {
                         data-selected={selectedIndex === absoluteIdx}
                         aria-selected={selectedIndex === absoluteIdx}
                       >
-                        <ItemTitle className="font-mono text-xs">{item.Name}</ItemTitle>
+                        <ItemTitle className="w-full min-w-0 gap-2">
+                          <span className="truncate font-mono text-xs">{item.Name}</span>
+                          <span className="text-muted-foreground truncate text-[11px] leading-snug font-normal">
+                            {item.Data}
+                          </span>
+                        </ItemTitle>
                       </Item>
                     );
                   })}
