@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use tauri::{async_runtime, AppHandle};
+use tauri::{async_runtime, AppHandle, Manager};
 
 use crate::api::events;
 use crate::api::types::{
@@ -16,6 +16,7 @@ use crate::api::types::{
 use crate::core::template;
 
 const TOP_ITEMS_LIMIT: usize = 100;
+const MAIN_WINDOW_LABEL: &str = "main";
 
 pub enum EscapeResult {
     ClearedQuery,
@@ -496,6 +497,8 @@ impl AppState {
                         .map_err(|err| format!("failed to run action command: {err}"))?;
 
                     if status.success() {
+                        hide_main_window(app);
+                        self.reset_to_root(resources_dir, app)?;
                         return Ok(());
                     } else {
                         return Err(format!("action command exited with status {status}"));
@@ -542,6 +545,58 @@ fn append_items_for_frame(inner: &mut AppInner, frame_uid: u64, new_items: Vec<I
             frame.all_items.extend(new_items.clone());
             frame.filtered_items.extend(new_items);
         }
+    }
+}
+
+impl AppState {
+    fn reset_to_root(&self, resources_dir: &Path, app: &AppHandle) -> Result<(), String> {
+        {
+            let mut inner = self.inner.write().map_err(|_| "state lock poisoned")?;
+            if !inner.spells.contains_key(STARTING_SPELL_ID) {
+                return Err(format!("spell {STARTING_SPELL_ID} not found"));
+            }
+            let frame = new_frame(&mut inner, STARTING_SPELL_ID.to_string());
+            inner.stack.clear();
+            inner.stack.push(frame);
+            inner.status = AppStatus::Loading;
+        }
+
+        let _ = self.emit_snapshot(app);
+
+        let state = self.clone();
+        let resources_dir = resources_dir.to_path_buf();
+        let app_handle = app.clone();
+        async_runtime::spawn_blocking(move || {
+            let is_streaming = state
+                .get_current_spell()
+                .and_then(|s| s.is_streaming)
+                .unwrap_or(false);
+
+            let result = if is_streaming {
+                state.stream_items_for_current_frame(&resources_dir, &app_handle)
+            } else {
+                state.finish_loading_with_items(&resources_dir)
+            };
+
+            match result {
+                Ok(()) => {
+                    let _ = state.emit_snapshot(&app_handle);
+                }
+                Err(err) => {
+                    state.set_error();
+                    let _ = state.emit_snapshot(&app_handle);
+                    eprintln!("failed to load items after reset: {err}");
+                }
+            }
+        });
+
+        Ok(())
+    }
+}
+
+fn hide_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        let _ = window.hide();
     }
 }
 
