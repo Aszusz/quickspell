@@ -28,6 +28,27 @@ pub fn run() {
                 app.set_dock_visibility(false);
             }
             #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                if let Some(monitor) = app.primary_monitor()? {
+                    let screen = monitor.size();
+                    let target_width = screen.width / 2;
+                    let target_height = screen.height / 2;
+
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+                        target_width,
+                        target_height,
+                    )));
+
+                    let pos_x =
+                        i32::try_from((screen.width.saturating_sub(target_width)) / 2).unwrap_or(0);
+                    let pos_y = i32::try_from((screen.height.saturating_sub(target_height)) / 2)
+                        .unwrap_or(0);
+                    let _ = window.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition::new(pos_x, pos_y),
+                    ));
+                }
+            }
+            #[cfg(desktop)]
             {
                 let handle = app.handle();
                 handle.plugin(

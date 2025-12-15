@@ -20,6 +20,7 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "alwaysOnTop": true,
+        "resizable": false,
         "trafficLightPosition": {
           "x": -1000,
           "y": -1000
