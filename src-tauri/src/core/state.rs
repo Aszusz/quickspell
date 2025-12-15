@@ -14,6 +14,8 @@ use crate::api::types::{
 };
 use crate::core::template;
 
+const TOP_ITEMS_LIMIT: usize = 100;
+
 pub enum EscapeResult {
     ClearedQuery,
     PoppedFrame,
@@ -126,8 +128,8 @@ impl AppState {
             all_items
         };
 
-        if filtered.len() > 100 {
-            filtered.truncate(100);
+        if filtered.len() > TOP_ITEMS_LIMIT {
+            filtered.truncate(TOP_ITEMS_LIMIT);
         }
 
         let result_count = filtered.len();
@@ -171,10 +173,21 @@ impl AppState {
                 .stack
                 .last()
                 .map(|f| {
-                    let clamped_idx = f.selected_idx.min(f.filtered_items.len().saturating_sub(1));
-                    let selected = f.filtered_items.get(clamped_idx).cloned();
+                    let (clamped_idx, selected) = if let Some(max_idx) =
+                        max_selectable_index(f.filtered_items.len())
+                    {
+                        let idx = f.selected_idx.min(max_idx);
+                        (idx, f.filtered_items.get(idx).cloned())
+                    } else {
+                        (0, None)
+                    };
+
                     (
-                        f.filtered_items.iter().take(100).cloned().collect(),
+                        f.filtered_items
+                            .iter()
+                            .take(TOP_ITEMS_LIMIT)
+                            .cloned()
+                            .collect(),
                         f.filtered_items.len(),
                         f.query.clone(),
                         f.is_filtering,
@@ -239,14 +252,13 @@ impl AppState {
     pub fn set_selection_delta(&self, delta: isize) -> bool {
         if let Ok(mut inner) = self.inner.write() {
             if let Some(frame) = inner.stack.last_mut() {
-                let len = frame.filtered_items.len();
-                if len == 0 {
+                let Some(max_idx) = max_selectable_index(frame.filtered_items.len()) else {
                     frame.selected_idx = 0;
                     return true;
-                }
+                };
 
-                let current = frame.selected_idx.min(len.saturating_sub(1));
-                let next = (current as isize + delta).clamp(0, (len.saturating_sub(1)) as isize);
+                let current = frame.selected_idx.min(max_idx);
+                let next = (current as isize + delta).clamp(0, max_idx as isize);
                 frame.selected_idx = next as usize;
                 return true;
             }
@@ -605,13 +617,26 @@ fn resolve_log_path() -> std::io::Result<std::path::PathBuf> {
         .ok_or_else(|| std::io::Error::other("could not resolve log directory for quickspell"))
 }
 
+fn max_selectable_index(len: usize) -> Option<usize> {
+    if len == 0 {
+        None
+    } else {
+        Some(
+            len.saturating_sub(1)
+                .min(TOP_ITEMS_LIMIT.saturating_sub(1)),
+        )
+    }
+}
+
 fn clamp_selection(frame: &mut Frame) {
     if frame.filtered_items.is_empty() {
         frame.selected_idx = 0;
     } else {
-        frame.selected_idx = frame
-            .selected_idx
-            .min(frame.filtered_items.len().saturating_sub(1));
+        if let Some(max_idx) = max_selectable_index(frame.filtered_items.len()) {
+            frame.selected_idx = frame.selected_idx.min(max_idx);
+        } else {
+            frame.selected_idx = 0;
+        }
     }
 }
 
