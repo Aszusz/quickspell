@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { StateSnapshot } from "./events";
+import type { Item as SpellItem, StateSnapshot } from "./events";
 import { listenEvent } from "./events";
 import { useOsTheme } from "./hooks/use-os-theme";
 import {
@@ -32,6 +32,8 @@ const DEFAULT_SNAPSHOT: StateSnapshot = {
 
 function App() {
   const [snapshot, setSnapshot] = useState<StateSnapshot>(DEFAULT_SNAPSHOT);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [dialogItem, setDialogItem] = useState<SpellItem | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   useOsTheme();
@@ -39,6 +41,22 @@ function App() {
     estimatedItemHeight: 44,
     gap: 8,
   });
+
+  const closeActionsDialog = useCallback(() => {
+    setIsActionsOpen(false);
+    setDialogItem(null);
+    requestAnimationFrame(() => searchRef.current?.focus());
+  }, []);
+
+  const openActionsDialog = useCallback(
+    (item?: SpellItem | null) => {
+      const target = item ?? snapshot.selectedItem;
+      if (!target) return;
+      setDialogItem(target);
+      setIsActionsOpen(true);
+    },
+    [snapshot.selectedItem]
+  );
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -77,6 +95,20 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isActionsOpen) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeActionsDialog();
+        }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
+        e.preventDefault();
+        openActionsDialog();
+        return;
+      }
+
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         const delta = e.key === "ArrowDown" ? 1 : -1;
@@ -102,7 +134,7 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [closeActionsDialog, isActionsOpen, openActionsDialog]);
 
   const handleSearchBlur = () => {
     // Keep focus on the search box even after clicking outside.
@@ -246,6 +278,28 @@ function App() {
             <span className="text-foreground/80">Optional actions</span>
           </div>
         </div>
+        {isActionsOpen && dialogItem ? (
+          <div className="bg-background/70 fixed inset-0 z-50 flex items-center justify-center backdrop-blur">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Actions for ${dialogItem.Name}`}
+              className="border-border/80 bg-card text-card-foreground w-full max-w-md rounded-lg border shadow-lg"
+            >
+              <header className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs tracking-wide uppercase">
+                    Optional actions
+                  </span>
+                  <span className="text-foreground font-mono text-sm">{dialogItem.Name}</span>
+                </div>
+              </header>
+              <div className="text-muted-foreground px-4 pb-4 text-sm">
+                <p>Hook your optional actions here. Press Escape to close.</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </main>
   );

@@ -173,14 +173,13 @@ impl AppState {
                 .stack
                 .last()
                 .map(|f| {
-                    let (clamped_idx, selected) = if let Some(max_idx) =
-                        max_selectable_index(f.filtered_items.len())
-                    {
-                        let idx = f.selected_idx.min(max_idx);
-                        (idx, f.filtered_items.get(idx).cloned())
-                    } else {
-                        (0, None)
-                    };
+                    let (clamped_idx, selected) =
+                        if let Some(max_idx) = max_selectable_index(f.filtered_items.len()) {
+                            let idx = f.selected_idx.min(max_idx);
+                            (idx, f.filtered_items.get(idx).cloned())
+                        } else {
+                            (0, None)
+                        };
 
                     (
                         f.filtered_items
@@ -621,22 +620,17 @@ fn max_selectable_index(len: usize) -> Option<usize> {
     if len == 0 {
         None
     } else {
-        Some(
-            len.saturating_sub(1)
-                .min(TOP_ITEMS_LIMIT.saturating_sub(1)),
-        )
+        Some(len.saturating_sub(1).min(TOP_ITEMS_LIMIT.saturating_sub(1)))
     }
 }
 
 fn clamp_selection(frame: &mut Frame) {
     if frame.filtered_items.is_empty() {
         frame.selected_idx = 0;
+    } else if let Some(max_idx) = max_selectable_index(frame.filtered_items.len()) {
+        frame.selected_idx = frame.selected_idx.min(max_idx);
     } else {
-        if let Some(max_idx) = max_selectable_index(frame.filtered_items.len()) {
-            frame.selected_idx = frame.selected_idx.min(max_idx);
-        } else {
-            frame.selected_idx = 0;
-        }
+        frame.selected_idx = 0;
     }
 }
 
