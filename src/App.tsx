@@ -33,7 +33,10 @@ function App() {
   const [snapshot, setSnapshot] = useState<StateSnapshot>(DEFAULT_SNAPSHOT);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [dialogItem, setDialogItem] = useState<SpellItem | null>(null);
+  const [actionQuery, setActionQuery] = useState("");
+  const [actionIndex, setActionIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const actionSearchRef = useRef<HTMLInputElement | null>(null);
 
   useOsTheme();
   const { containerRef, measureItemRef, pageSize } = usePaginationLayout({
@@ -43,6 +46,10 @@ function App() {
 
   const selectedItem = snapshot.selectedItem?.details ?? null;
   const selectedActions = snapshot.selectedItem?.actions ?? [];
+  const optionalActions = useMemo(
+    () => selectedActions.filter((action) => action.label !== "MAIN"),
+    [selectedActions]
+  );
   const selectedIndex = snapshot.selectedItem?.index ?? 0;
 
   const closeActionsDialog = useCallback(() => {
@@ -56,7 +63,11 @@ function App() {
       const target = item ?? selectedItem;
       if (!target) return;
       setDialogItem(target);
+      setActionQuery("");
+      setActionIndex(0);
       setIsActionsOpen(true);
+      searchRef.current?.blur();
+      requestAnimationFrame(() => actionSearchRef.current?.focus());
     },
     [selectedItem]
   );
@@ -92,6 +103,25 @@ function App() {
     [snapshot.spellNames]
   );
 
+  const filteredActions = useMemo(() => {
+    const query = actionQuery.trim().toLowerCase();
+    if (!query) return optionalActions;
+    return optionalActions.filter((action) => action.label.toLowerCase().includes(query));
+  }, [actionQuery, optionalActions]);
+
+  useEffect(() => {
+    setActionIndex((idx) => {
+      if (filteredActions.length === 0) return 0;
+      return Math.min(idx, filteredActions.length - 1);
+    });
+  }, [filteredActions]);
+
+  useEffect(() => {
+    if (isActionsOpen) {
+      actionSearchRef.current?.focus();
+    }
+  }, [isActionsOpen]);
+
   useEffect(() => {
     searchRef.current?.focus();
   }, []);
@@ -102,6 +132,15 @@ function App() {
         if (e.key === "Escape") {
           e.preventDefault();
           closeActionsDialog();
+        }
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          setActionIndex((prev) => {
+            if (filteredActions.length === 0) return 0;
+            const delta = e.key === "ArrowDown" ? 1 : -1;
+            const next = prev + delta;
+            return Math.max(0, Math.min(filteredActions.length - 1, next));
+          });
         }
         return;
       }
@@ -137,10 +176,11 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeActionsDialog, isActionsOpen, openActionsDialog]);
+  }, [closeActionsDialog, filteredActions.length, isActionsOpen, openActionsDialog]);
 
   const handleSearchBlur = () => {
-    // Keep focus on the search box even after clicking outside.
+    // Keep focus on the search box even after clicking outside, unless the actions dialog is open.
+    if (isActionsOpen) return;
     requestAnimationFrame(() => searchRef.current?.focus());
   };
 
@@ -250,9 +290,6 @@ function App() {
                     />
                   ))}
                 </nav>
-                <span className="text-muted-foreground text-xs">
-                  Page {currentPage + 1} of {pageCount}
-                </span>
               </div>
             ) : null}
           </section>
@@ -297,23 +334,52 @@ function App() {
                   <span className="text-foreground font-mono text-sm">{dialogItem.Name}</span>
                 </div>
               </header>
-              <div className="text-muted-foreground space-y-2 px-4 pb-4 text-sm">
-                {selectedActions.length ? (
-                  <ul className="space-y-1">
-                    {selectedActions.map((action) => (
-                      <li
-                        key={`${action.label}-${action.type}`}
-                        className="text-foreground border-border/80 flex items-center justify-between rounded border px-2 py-1 text-xs"
-                      >
-                        <span className="font-medium">{action.label}</span>
-                        <span className="text-muted-foreground tracking-wide uppercase">
-                          {action.type}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+              <div className="text-muted-foreground space-y-3 px-4 pb-4 text-sm">
+                <div className="relative">
+                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                  <Input
+                    ref={actionSearchRef}
+                    value={actionQuery}
+                    onChange={(e) => {
+                      setActionQuery(e.target.value);
+                      setActionIndex(0);
+                    }}
+                    placeholder="Filter actions..."
+                    className="pl-9"
+                  />
+                </div>
+                {filteredActions.length ? (
+                  <div className="bg-muted/40 border-border/80 max-h-64 overflow-auto rounded-md border">
+                    <ItemGroup className="gap-1 p-1">
+                      {filteredActions.map((action, idx) => {
+                        const isSelected = idx === actionIndex;
+                        return (
+                          <Item
+                            key={`${action.label}-${action.type}-${idx}`}
+                            size="sm"
+                            variant="muted"
+                            className="data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary/50 border-border/80 border px-3 py-2"
+                            data-selected={isSelected}
+                            aria-selected={isSelected}
+                            role="option"
+                            tabIndex={-1}
+                            onMouseEnter={() => setActionIndex(idx)}
+                          >
+                            <ItemTitle className="flex w-full items-center justify-between">
+                              <span className="font-mono text-xs">{action.label}</span>
+                              <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                                {action.type}
+                              </span>
+                            </ItemTitle>
+                          </Item>
+                        );
+                      })}
+                    </ItemGroup>
+                  </div>
                 ) : (
-                  <p>No available actions. Press Escape to close.</p>
+                  <p className="text-foreground/80 text-xs">
+                    No matching actions. Press Escape to close.
+                  </p>
                 )}
               </div>
             </div>
