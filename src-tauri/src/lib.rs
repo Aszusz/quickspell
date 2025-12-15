@@ -1,8 +1,11 @@
 mod api;
 mod core;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{
-    menu::MenuBuilder, tray::TrayIconBuilder, ActivationPolicy, AppHandle, Manager, WindowEvent,
+    menu::MenuBuilder, tray::TrayIconBuilder, ActivationPolicy, AppHandle, Manager, RunEvent,
+    WindowEvent,
 };
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, ShortcutState};
@@ -15,11 +18,20 @@ const TRAY_MENU_SHOW: &str = "tray-show";
 const TRAY_MENU_QUIT: &str = "tray-quit";
 const GLOBAL_HOTKEY_TOGGLE: &str = "ctrl+space";
 
+static ALLOW_APP_EXIT: AtomicBool = AtomicBool::new(false);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState::default())
+        .manage(AppState::default());
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.enable_macos_default_menu(false);
+    }
+
+    let app = builder
         .setup(|app| {
             setup_tray(app)?;
             #[cfg(target_os = "macos")]
@@ -90,8 +102,16 @@ pub fn run() {
             api::commands::invoke_action,
             api::commands::handle_escape,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app, event| {
+        if let RunEvent::ExitRequested { api, .. } = event {
+            if !ALLOW_APP_EXIT.swap(false, Ordering::Relaxed) {
+                api.prevent_exit();
+            }
+        }
+    });
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -104,7 +124,10 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .menu(&tray_menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             TRAY_MENU_SHOW => toggle_main_window(app),
-            TRAY_MENU_QUIT => app.exit(0),
+            TRAY_MENU_QUIT => {
+                ALLOW_APP_EXIT.store(true, Ordering::Relaxed);
+                app.exit(0);
+            }
             _ => {}
         });
 
