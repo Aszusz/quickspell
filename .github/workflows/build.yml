@@ -42,9 +42,25 @@ jobs:
         env:
           CI: true
 
+      - name: Package build artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # Copy DMG(s) if present
+          if ls src-tauri/target/release/bundle/dmg/*.dmg >/dev/null 2>&1; then
+            cp src-tauri/target/release/bundle/dmg/*.dmg artifacts/
+          fi
+          # Zip the .app for convenience
+          if ls src-tauri/target/release/bundle/macos/*.app >/dev/null 2>&1; then
+            for app in src-tauri/target/release/bundle/macos/*.app; do
+              zip -r "artifacts/$(basename "$app").zip" "$app"
+            done
+          fi
+          ls -lh artifacts
+
       - name: Upload Tauri bundle
         uses: actions/upload-artifact@v4
         with:
           name: tauri-bundle
-          path: src-tauri/target/release/bundle/**
+          path: artifacts/**
           if-no-files-found: error

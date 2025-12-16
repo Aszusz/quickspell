@@ -33,4 +33,7 @@ jobs:
           name: ${{ inputs.version }}
           draft: true
           target_commitish: ${{ github.sha }}
-          files: artifacts/**
+          files: artifacts/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
