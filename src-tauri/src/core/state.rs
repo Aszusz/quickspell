@@ -17,6 +17,7 @@ use crate::core::template;
 
 const TOP_ITEMS_LIMIT: usize = 100;
 const MAIN_WINDOW_LABEL: &str = "main";
+const BUNDLE_IDENTIFIER: &str = "com.adrian.quickspell";
 
 pub enum EscapeResult {
     ClearedQuery,
@@ -683,19 +684,19 @@ fn resolve_log_path() -> std::io::Result<std::path::PathBuf> {
         env::var_os("HOME").map(std::path::PathBuf::from).map(|p| {
             p.join("Library")
                 .join("Application Support")
-                .join("QuickSpell")
+                .join(BUNDLE_IDENTIFIER)
         })
     } else if cfg!(target_os = "windows") {
         env::var_os("APPDATA")
             .map(std::path::PathBuf::from)
-            .map(|p| p.join("QuickSpell"))
+            .map(|p| p.join(BUNDLE_IDENTIFIER))
     } else {
         env::var_os("XDG_DATA_HOME")
             .map(std::path::PathBuf::from)
             .or_else(|| {
                 env::var_os("HOME").map(|p| std::path::PathBuf::from(p).join(".local/share"))
             })
-            .map(|p| p.join("quickspell"))
+            .map(|p| p.join(BUNDLE_IDENTIFIER))
     };
 
     base.map(|p| p.join("quickspell.log"))

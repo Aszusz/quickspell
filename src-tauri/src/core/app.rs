@@ -51,31 +51,90 @@ pub fn initialize(app: &AppHandle) -> Result<(), String> {
 }
 
 pub fn resolve_resource_dirs(app: &AppHandle) -> (PathBuf, PathBuf) {
-    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/spells");
+    let factory_resources_dir = resolve_factory_resources_dir(app);
+    let user_resources_dir = match resolve_user_resources_dir(app) {
+        Ok(dir) => {
+            if let Err(err) = sync_default_resources(&factory_resources_dir, &dir) {
+                eprintln!("failed to sync default resources: {err}");
+            }
+            dir
+        }
+        Err(err) => {
+            eprintln!("failed to resolve user resources dir, falling back to factory resources: {err}");
+            factory_resources_dir.clone()
+        }
+    };
 
-    let resource_dir = ["resources/spells", "spells"].iter().find_map(|relative| {
-        app.path()
-            .resolve(relative, BaseDirectory::Resource)
-            .ok()
-            .filter(|p| p.exists())
-    });
-
-    let spells_dir = dev_dir
-        .exists()
-        .then_some(dev_dir.clone())
-        .or(resource_dir)
-        .unwrap_or(dev_dir);
-    let resources_dir = spells_dir
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| spells_dir.clone());
-
-    (spells_dir, resources_dir)
+    let spells_dir = user_resources_dir.join("spells");
+    (spells_dir, user_resources_dir)
 }
 
 pub fn resolve_resources_dir(app: &AppHandle) -> PathBuf {
     let (_, resources_dir) = resolve_resource_dirs(app);
     resources_dir
+}
+
+fn resolve_factory_resources_dir(app: &AppHandle) -> PathBuf {
+    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
+    if dev_dir.exists() {
+        return dev_dir;
+    }
+
+    let resource_dir = ["resources/spells", "spells", "resources"]
+        .iter()
+        .find_map(|relative| {
+            app.path()
+                .resolve(relative, BaseDirectory::Resource)
+                .ok()
+                .filter(|p| p.exists())
+        });
+
+    resource_dir
+        .map(|path| {
+            if path.file_name().map(|name| name == "spells").unwrap_or(false) {
+                path.parent().map(|p| p.to_path_buf()).unwrap_or(path)
+            } else {
+                path
+            }
+        })
+        .unwrap_or(dev_dir)
+}
+
+fn resolve_user_resources_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("failed to resolve app config dir: {err}"))?;
+    fs::create_dir_all(&dir)
+        .map_err(|err| format!("failed to create user resources dir {}: {err}", dir.display()))?;
+    Ok(dir)
+}
+
+fn sync_default_resources(factory_dir: &Path, user_dir: &Path) -> std::io::Result<()> {
+    for subdir in ["spells", "providers"] {
+        let src = factory_dir.join(subdir);
+        if !src.exists() {
+            continue;
+        }
+
+        let dst = user_dir.join(subdir);
+        fs::create_dir_all(&dst)?;
+
+        for entry in fs::read_dir(&src)? {
+            let entry = entry?;
+            let src_path = entry.path();
+            if !src_path.is_file() {
+                continue;
+            }
+
+            let dst_path = dst.join(entry.file_name());
+            if !dst_path.exists() {
+                fs::copy(&src_path, &dst_path)?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn load_spells_from_dir(dir: &Path) -> Result<HashMap<String, Spell>, SpellLoadError> {
