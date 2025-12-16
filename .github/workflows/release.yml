@@ -20,11 +20,12 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download Tauri bundle artifact
+      - name: Download Tauri bundle artifacts
         uses: actions/download-artifact@v4
         with:
-          name: tauri-bundle
+          pattern: tauri-bundle-*
           path: artifacts
+          merge-multiple: true
 
       - name: Create draft release
         uses: softprops/action-gh-release@v2
@@ -33,7 +34,7 @@ jobs:
           name: ${{ inputs.version }}
           draft: true
           target_commitish: ${{ github.sha }}
-          files: artifacts/*
+          files: artifacts/*.dmg
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
